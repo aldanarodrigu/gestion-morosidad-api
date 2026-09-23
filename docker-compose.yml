@@ -1,0 +1,63 @@
+# Levanta el sistema completo: Postgres + API + Frontend.
+# Requiere el repo del frontend clonado al lado de este:
+#   NetBeansProjects/
+#     gestion-morosidad-api/        <- este repo
+#     gestion-morosidad-frontend/
+#
+# Uso: copiar .env.example a .env, completar valores y ejecutar `docker compose up --build`
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Definir DB_PASSWORD en .env}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    ports:
+      # Solo accesible desde la propia máquina (para conectarse con DBeaver/pgAdmin)
+      - "127.0.0.1:${DB_HOST_PORT:-5433}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      UTEC_API_USERNAME: ${UTEC_API_USERNAME:-}
+      UTEC_API_PASSWORD: ${UTEC_API_PASSWORD:-}
+    ports:
+      - "127.0.0.1:${API_HOST_PORT:-9080}:8080"
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+
+  frontend:
+    build: ../gestion-morosidad-frontend
+    restart: unless-stopped
+    depends_on:
+      - api
+    environment:
+      API_UPSTREAM: http://api:8080
+    ports:
+      - "127.0.0.1:${FRONT_HOST_PORT:-8000}:8080"
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  db-data:
