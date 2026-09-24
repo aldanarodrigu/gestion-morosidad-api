@@ -58,6 +58,7 @@ class DeudaServiceTest {
         assertThat(respuesta.diasAtraso()).isEqualTo(90);
         assertThat(respuesta.importe()).isEqualByComparingTo("1550.00");
         assertThat(respuesta.padron().numeroPadron()).isEqualTo("100");
+        assertThat(respuesta.padron().contribuyente().nombre()).isEqualTo("Persona de ejemplo");
         assertThat(respuesta.contribuyente().nombre()).isEqualTo("Persona de ejemplo");
     }
 
@@ -123,7 +124,6 @@ class DeudaServiceTest {
 
     private static Deuda deuda(Long id, String numeroPadron, LocalDate deudaDesde) {
         Contribuyente contribuyente = new Contribuyente();
-        contribuyente.setCm("CM-" + id);
         contribuyente.setNombre("Persona de ejemplo");
 
         Padron padron = new Padron();
