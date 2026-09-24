@@ -1,12 +1,16 @@
 package com.intendencia.gestion_morosidad_api.deuda.entity;
 
+import com.intendencia.gestion_morosidad_api.modules.padron.entity.Padron;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -18,8 +22,8 @@ import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
 /**
- * Deuda vencida de un padrón. Cada fila corresponde a un CM de GeoPagos (/facturas/pendientes).
- * CM, padrón y documento se guardan como texto: son identificadores, no números operables.
+ * Deuda vencida de un padrón, cargada desde GeoPagos (/facturas/pendientes).
+ * Los datos del padrón (CM, número, localidad, tipo) y del contribuyente se obtienen a través de {@link #padron}.
  */
 @Entity
 @Table(name = "deuda")
@@ -32,30 +36,9 @@ public class Deuda {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, unique = true, length = 30)
-    private String cm;
-
-    @Column(name = "numero_padron", nullable = false, length = 30)
-    private String numeroPadron;
-
-    @Column(length = 30)
-    private String block;
-
-    @Column(length = 30)
-    private String unidad;
-
-    @Column(length = 100)
-    private String localidad;
-
-    /** Tipo de padrón (CIU, CIR, CNV, SEM, FAC...): determina la clasificación del deudor. */
-    @Column(length = 10)
-    private String padtipo;
-
-    @Column(name = "contribuyente_nombre", length = 200)
-    private String contribuyenteNombre;
-
-    @Column(name = "contribuyente_documento", length = 30)
-    private String contribuyenteDocumento;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "padron_id", nullable = false)
+    private Padron padron;
 
     /** Códigos de tributo separados por coma, tal como llegan de GeoPagos (TRIBUTOS_DEUDA). */
     @Column(length = 200)

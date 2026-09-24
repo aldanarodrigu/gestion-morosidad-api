@@ -40,7 +40,7 @@ public class DeudaService {
 
     public List<DeudaResponse> listarPorPadron(String numeroPadron) {
         LocalDate hoy = LocalDate.now(clock);
-        return deudaRepository.findByNumeroPadronOrderByDeudaDesdeAsc(numeroPadron.trim()).stream()
+        return deudaRepository.findByPadronNumeroPadronOrderByDeudaDesdeAsc(numeroPadron.trim()).stream()
                 .map(deuda -> DeudaMapper.toResponse(deuda, hoy))
                 .toList();
     }

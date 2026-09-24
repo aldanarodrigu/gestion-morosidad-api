@@ -9,6 +9,8 @@ import com.intendencia.gestion_morosidad_api.deuda.dto.DeudaResponse;
 import com.intendencia.gestion_morosidad_api.deuda.entity.Deuda;
 import com.intendencia.gestion_morosidad_api.deuda.entity.EstadoDeuda;
 import com.intendencia.gestion_morosidad_api.deuda.repository.DeudaRepository;
+import com.intendencia.gestion_morosidad_api.modules.contribuyente.entity.Contribuyente;
+import com.intendencia.gestion_morosidad_api.modules.padron.entity.Padron;
 import com.intendencia.gestion_morosidad_api.shared.exception.RecursoNoEncontradoException;
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -49,6 +51,8 @@ class DeudaServiceTest {
 
         assertThat(respuesta.diasAtraso()).isEqualTo(90);
         assertThat(respuesta.importe()).isEqualByComparingTo("1550.00");
+        assertThat(respuesta.padron().numeroPadron()).isEqualTo("100");
+        assertThat(respuesta.contribuyente().nombre()).isEqualTo("Persona de ejemplo");
     }
 
     @Test
@@ -68,7 +72,7 @@ class DeudaServiceTest {
 
     @Test
     void listarPorPadronIgnoraEspaciosDelParametro() {
-        when(deudaRepository.findByNumeroPadronOrderByDeudaDesdeAsc("4567"))
+        when(deudaRepository.findByPadronNumeroPadronOrderByDeudaDesdeAsc("4567"))
                 .thenReturn(List.of(deuda(1L, "4567", LocalDate.of(2025, 1, 1))));
 
         assertThat(deudaService.listarPorPadron(" 4567 ")).hasSize(1);
@@ -94,11 +98,19 @@ class DeudaServiceTest {
                 .isInstanceOf(RecursoNoEncontradoException.class);
     }
 
-    private static Deuda deuda(Long id, String padron, LocalDate deudaDesde) {
+    private static Deuda deuda(Long id, String numeroPadron, LocalDate deudaDesde) {
+        Contribuyente contribuyente = new Contribuyente();
+        contribuyente.setCm("CM-" + id);
+        contribuyente.setNombre("Persona de ejemplo");
+
+        Padron padron = new Padron();
+        padron.setCm("CM-" + id);
+        padron.setNumeroPadron(numeroPadron);
+        padron.setContribuyente(contribuyente);
+
         Deuda deuda = new Deuda();
         deuda.setId(id);
-        deuda.setCm("CM-" + id);
-        deuda.setNumeroPadron(padron);
+        deuda.setPadron(padron);
         deuda.setImporte(new BigDecimal("1550.00"));
         deuda.setDeudaDesde(deudaDesde);
         return deuda;

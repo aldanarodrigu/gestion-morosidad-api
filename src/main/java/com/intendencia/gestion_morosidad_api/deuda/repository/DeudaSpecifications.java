@@ -2,6 +2,9 @@ package com.intendencia.gestion_morosidad_api.deuda.repository;
 
 import com.intendencia.gestion_morosidad_api.deuda.dto.DeudaFiltro;
 import com.intendencia.gestion_morosidad_api.deuda.entity.Deuda;
+import com.intendencia.gestion_morosidad_api.modules.contribuyente.entity.Contribuyente;
+import com.intendencia.gestion_morosidad_api.modules.padron.entity.Padron;
+import jakarta.persistence.criteria.Path;
 import jakarta.persistence.criteria.Predicate;
 import java.util.ArrayList;
 import java.util.List;
@@ -23,17 +26,19 @@ public final class DeudaSpecifications {
             if (filtro.estado() != null) {
                 predicados.add(cb.equal(root.get("estado"), filtro.estado()));
             }
+            Path<Padron> padron = root.get("padron");
             if (tieneTexto(filtro.padron())) {
-                predicados.add(cb.equal(root.get("numeroPadron"), filtro.padron().trim()));
+                predicados.add(cb.equal(padron.get("numeroPadron"), filtro.padron().trim()));
             }
             if (tieneTexto(filtro.contribuyente())) {
                 String texto = filtro.contribuyente().trim();
+                Path<Contribuyente> contribuyente = padron.get("contribuyente");
                 predicados.add(cb.or(
-                        cb.like(cb.lower(root.get("contribuyenteNombre")), contiene(texto), ESCAPE),
-                        cb.equal(root.get("contribuyenteDocumento"), texto)));
+                        cb.like(cb.lower(contribuyente.get("nombre")), contiene(texto), ESCAPE),
+                        cb.equal(contribuyente.get("documento"), texto)));
             }
             if (tieneTexto(filtro.localidad())) {
-                predicados.add(cb.like(cb.lower(root.get("localidad")), contiene(filtro.localidad()), ESCAPE));
+                predicados.add(cb.like(cb.lower(padron.get("localidad")), contiene(filtro.localidad()), ESCAPE));
             }
 
             return cb.and(predicados.toArray(Predicate[]::new));
