@@ -67,4 +67,9 @@ public class GlobalExceptionHandler {
     private ResponseEntity<ErrorResponse> respuesta(HttpStatus status, String mensaje) {
         return ResponseEntity.status(status).body(ErrorResponse.de(status.value(), mensaje));
     }
+
+    @ExceptionHandler(RecursoYaExisteException.class)
+    public ResponseEntity<ErrorResponse> yaExiste(RecursoYaExisteException ex) {
+        return respuesta(HttpStatus.CONFLICT, ex.getMessage());
+    }
 }
