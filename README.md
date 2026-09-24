@@ -2,6 +2,19 @@
 
 Backend del Sistema de Gestión de Morosidad (Spring Boot 4, Java 21, PostgreSQL).
 
+## Relación entre padrón y contribuyente
+
+`CM` identifica al padrón en la API GeoPagos; `NUMERO_PADRON` es el número visible del padrón.
+Cada deuda referencia un padrón, y cada padrón referencia un contribuyente mediante
+`padrones.contribuyente_id`. `GET /api/padrones/{numeroPadron}` incluye el objeto
+`contribuyente` dentro del padrón. Las respuestas de deuda también permiten recorrer
+`deuda.padron.contribuyente`; el campo `deuda.contribuyente` sigue disponible para
+los consumidores actuales de la API.
+
+`CM` se guarda solo en `padrones.cm`. Las respuestas de contribuyente conservan el campo `cm`
+como identificador del padrón consultado. El origen no proporciona un identificador de persona,
+por lo que no se agrupan automáticamente padrones de una misma persona.
+
 ## Levantar todo con Docker
 
 Requiere Docker Desktop y el repo del frontend clonado al lado de este:

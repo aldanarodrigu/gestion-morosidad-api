@@ -27,24 +27,23 @@ public class ContribuyenteService {
 
         sincronizarDesdeGeoPagos();
 
-        return contribuyenteRepository.findAll()
+        return padronRepository.findAll()
                 .stream()
-                .map(this::convertirAResponse)
+                .map(ContribuyenteResponse::de)
                 .toList();
     }
 
     @Transactional
     public Optional<ContribuyenteResponse> buscarPorCm(String cm) {
 
-        Optional<Contribuyente> contribuyente =
-                contribuyenteRepository.findByCm(cm);
+        Optional<Padron> padron = padronRepository.findByCm(cm);
 
-        if (contribuyente.isEmpty()) {
+        if (padron.isEmpty()) {
             sincronizarDesdeGeoPagos();
-            contribuyente = contribuyenteRepository.findByCm(cm);
+            padron = padronRepository.findByCm(cm);
         }
 
-        return contribuyente.map(this::convertirAResponse);
+        return padron.map(ContribuyenteResponse::de);
     }
 
     @Transactional
@@ -67,20 +66,13 @@ public class ContribuyenteService {
             return;
         }
 
-        // Contribuyente
-        Contribuyente contribuyente = contribuyenteRepository
-                .findByCm(cm)
-                .orElseGet(Contribuyente::new);
-
-        contribuyente.setCm(cm);
+        Padron padron = padronRepository.findByCm(cm).orElseGet(Padron::new);
+        Contribuyente contribuyente = padron.getContribuyente();
+        if (contribuyente == null) {
+            contribuyente = new Contribuyente();
+        }
         contribuyente.setNombre(dto.nombrePersonas());
-
         contribuyente = contribuyenteRepository.save(contribuyente);
-
-        // Padrón
-        Padron padron = padronRepository
-                .findByCm(cm)
-                .orElseGet(Padron::new);
 
         padron.setCm(cm);
         padron.setNumeroPadron(convertirAString(dto.numeroPadron()));
@@ -91,16 +83,6 @@ public class ContribuyenteService {
         padron.setContribuyente(contribuyente);
 
         padronRepository.save(padron);
-    }
-
-    private ContribuyenteResponse convertirAResponse(
-            Contribuyente contribuyente) {
-
-        return new ContribuyenteResponse(
-                contribuyente.getCm(),
-                contribuyente.getNombre(),
-                contribuyente.getDocumento()
-        );
     }
 
     private String convertirAString(Object valor) {

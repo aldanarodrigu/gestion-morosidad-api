@@ -108,16 +108,6 @@ class SincronizacionDeudasProcessor {
             return;
         }
 
-        Contribuyente contribuyente = ctx.contribuyentesPorCm.get(cm);
-        if (contribuyente == null) {
-            contribuyente = new Contribuyente();
-            contribuyente.setCm(cm);
-            ctx.contribuyentesPorCm.put(cm, contribuyente);
-            ctx.contribuyentesNuevos.add(contribuyente);
-        }
-        contribuyente.setNombre(Objects.requireNonNullElse(limitar(texto(fila.persona()), 255), SIN_NOMBRE));
-        contribuyente.setDocumento(limitar(texto(fila.documento()), 50));
-
         Padron padron = ctx.padronesPorCm.get(cm);
         if (padron == null) {
             padron = new Padron();
@@ -127,6 +117,15 @@ class SincronizacionDeudasProcessor {
         } else if (padron.getNumeroPadron() != null) {
             ctx.cmPorNumeroPadron.remove(padron.getNumeroPadron());
         }
+
+        Contribuyente contribuyente = padron.getContribuyente();
+        if (contribuyente == null) {
+            contribuyente = new Contribuyente();
+            ctx.contribuyentesNuevos.add(contribuyente);
+        }
+        contribuyente.setNombre(Objects.requireNonNullElse(limitar(texto(fila.persona()), 255), SIN_NOMBRE));
+        contribuyente.setDocumento(limitar(texto(fila.documento()), 50));
+
         padron.setNumeroPadron(limitar(numeroPadron, 100));
         padron.setTipoPadron(limitar(texto(fila.padtipo()), 100));
         padron.setLocalidad(limitar(texto(fila.localidad()), 255));
@@ -220,8 +219,6 @@ class SincronizacionDeudasProcessor {
         final LocalDateTime ahora;
         final ReglasSegmentacion reglas = configuracionSegmentoService.reglasVigentes();
         final Map<String, Tributo> tributosPorCodigo = porClave(tributoRepository.findAll(), Tributo::getCodigo);
-        final Map<String, Contribuyente> contribuyentesPorCm =
-                porClave(contribuyenteRepository.findAll(), Contribuyente::getCm);
         final Map<String, Padron> padronesPorCm = porClave(padronRepository.findAll(), Padron::getCm);
         final Map<String, String> cmPorNumeroPadron = new HashMap<>();
         final Map<String, Deuda> deudasPorCm =

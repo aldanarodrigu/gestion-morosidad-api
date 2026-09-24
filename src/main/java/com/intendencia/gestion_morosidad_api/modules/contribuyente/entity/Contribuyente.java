@@ -16,9 +16,6 @@ public class Contribuyente {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, unique = true)
-    private String cm;
-
     @Column(nullable = false)
     private String nombre;
 

@@ -28,4 +28,5 @@ public class ContribuyenteController {
                 .map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
+
 }

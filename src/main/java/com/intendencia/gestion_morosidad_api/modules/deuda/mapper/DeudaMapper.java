@@ -2,8 +2,6 @@ package com.intendencia.gestion_morosidad_api.modules.deuda.mapper;
 
 import com.intendencia.gestion_morosidad_api.modules.deuda.dto.DeudaResponse;
 import com.intendencia.gestion_morosidad_api.modules.deuda.entity.Deuda;
-import com.intendencia.gestion_morosidad_api.modules.contribuyente.dto.ContribuyenteResponse;
-import com.intendencia.gestion_morosidad_api.modules.contribuyente.entity.Contribuyente;
 import com.intendencia.gestion_morosidad_api.modules.padron.dto.PadronResponse;
 import com.intendencia.gestion_morosidad_api.modules.padron.entity.Padron;
 import com.intendencia.gestion_morosidad_api.modules.segmento.dto.SegmentoMoraResponse;
@@ -20,10 +18,11 @@ public final class DeudaMapper {
     /** @param hoy fecha de referencia para calcular los días de atraso */
     public static DeudaResponse toResponse(Deuda deuda, LocalDate hoy) {
         Padron padron = deuda.getPadron();
+        PadronResponse padronResponse = PadronResponse.de(padron);
         return DeudaResponse.builder()
                 .id(deuda.getId())
-                .padron(toPadronResponse(padron))
-                .contribuyente(toContribuyenteResponse(padron.getContribuyente()))
+                .padron(padronResponse)
+                .contribuyente(padronResponse.contribuyente())
                 .tributos(toTributosResponse(deuda))
                 .importe(deuda.getImporte())
                 .deudaDesde(deuda.getDeudaDesde())
@@ -45,23 +44,6 @@ public final class DeudaMapper {
                 .sorted(TributoResponse.POR_CODIGO)
                 .map(TributoResponse::de)
                 .toList();
-    }
-
-    private static PadronResponse toPadronResponse(Padron padron) {
-        return new PadronResponse(
-                padron.getCm(),
-                padron.getNumeroPadron(),
-                padron.getTipoPadron(),
-                padron.getLocalidad(),
-                padron.getBlock(),
-                padron.getUnidad());
-    }
-
-    private static ContribuyenteResponse toContribuyenteResponse(Contribuyente contribuyente) {
-        return new ContribuyenteResponse(
-                contribuyente.getCm(),
-                contribuyente.getNombre(),
-                contribuyente.getDocumento());
     }
 
     private static Long diasAtraso(LocalDate deudaDesde, LocalDate hoy) {

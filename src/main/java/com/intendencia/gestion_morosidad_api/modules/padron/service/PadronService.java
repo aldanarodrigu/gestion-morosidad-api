@@ -29,7 +29,7 @@ public class PadronService {
             padron = padronRepository.findByNumeroPadron(numeroPadron);
         }
 
-        return padron.map(this::convertirAResponse);
+        return padron.map(PadronResponse::de);
     }
 
     @Transactional
@@ -44,22 +44,7 @@ public class PadronService {
             padron = padronRepository.findByNumeroPadron(numeroPadron);
         }
 
-        return padron.map(p -> new ContribuyenteResponse(
-                p.getContribuyente().getCm(),
-                p.getContribuyente().getNombre(),
-                p.getContribuyente().getDocumento()
-        ));
+        return padron.map(ContribuyenteResponse::de);
     }
 
-    private PadronResponse convertirAResponse(Padron padron) {
-
-        return new PadronResponse(
-                padron.getCm(),
-                padron.getNumeroPadron(),
-                padron.getTipoPadron(),
-                padron.getLocalidad(),
-                padron.getBlock(),
-                padron.getUnidad()
-        );
-    }
 }

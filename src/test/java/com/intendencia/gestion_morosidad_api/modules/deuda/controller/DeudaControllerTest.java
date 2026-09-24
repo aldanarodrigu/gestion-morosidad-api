@@ -51,6 +51,7 @@ class DeudaControllerTest {
                         .param("segmento", "2"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.contenido[0].padron.cm").value("CM-1"))
+                .andExpect(jsonPath("$.contenido[0].padron.contribuyente.nombre").value("Persona de ejemplo"))
                 .andExpect(jsonPath("$.contenido[0].contribuyente.nombre").value("Persona de ejemplo"))
                 .andExpect(jsonPath("$.totalElementos").value(1));
 
@@ -131,7 +132,8 @@ class DeudaControllerTest {
     private static DeudaResponse deuda(Long id) {
         return DeudaResponse.builder()
                 .id(id)
-                .padron(new PadronResponse("CM-" + id, "4567", "CIU", "Libertad", null, null))
+                .padron(new PadronResponse("CM-" + id, "4567", "CIU", "Libertad", null, null,
+                        new ContribuyenteResponse("CM-" + id, "Persona de ejemplo", "1234567-8")))
                 .contribuyente(new ContribuyenteResponse("CM-" + id, "Persona de ejemplo", "1234567-8"))
                 .estado(EstadoDeuda.PENDIENTE)
                 .build();
