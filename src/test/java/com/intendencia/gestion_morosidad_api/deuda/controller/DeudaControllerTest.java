@@ -14,6 +14,8 @@ import com.intendencia.gestion_morosidad_api.deuda.dto.DeudaFiltro;
 import com.intendencia.gestion_morosidad_api.deuda.dto.DeudaResponse;
 import com.intendencia.gestion_morosidad_api.deuda.entity.EstadoDeuda;
 import com.intendencia.gestion_morosidad_api.deuda.service.DeudaService;
+import com.intendencia.gestion_morosidad_api.modules.contribuyente.dto.ContribuyenteResponse;
+import com.intendencia.gestion_morosidad_api.modules.padron.dto.PadronResponse;
 import com.intendencia.gestion_morosidad_api.shared.dto.PaginaResponse;
 import com.intendencia.gestion_morosidad_api.shared.exception.RecursoNoEncontradoException;
 import java.util.List;
@@ -46,7 +48,8 @@ class DeudaControllerTest {
                         .param("contribuyente", "perez")
                         .param("localidad", "Libertad"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.contenido[0].cm").value("CM-1"))
+                .andExpect(jsonPath("$.contenido[0].padron.cm").value("CM-1"))
+                .andExpect(jsonPath("$.contenido[0].contribuyente.nombre").value("Persona de ejemplo"))
                 .andExpect(jsonPath("$.totalElementos").value(1));
 
         verify(deudaService).listar(eq(new DeudaFiltro(EstadoDeuda.PENDIENTE, "4567", "perez", "Libertad")), any());
@@ -106,6 +109,11 @@ class DeudaControllerTest {
     }
 
     private static DeudaResponse deuda(Long id) {
-        return DeudaResponse.builder().id(id).cm("CM-" + id).estado(EstadoDeuda.PENDIENTE).build();
+        return DeudaResponse.builder()
+                .id(id)
+                .padron(new PadronResponse("CM-" + id, "4567", "CIU", "Libertad", null, null))
+                .contribuyente(new ContribuyenteResponse("CM-" + id, "Persona de ejemplo", "1234567-8"))
+                .estado(EstadoDeuda.PENDIENTE)
+                .build();
     }
 }
