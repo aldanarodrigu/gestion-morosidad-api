@@ -27,6 +27,21 @@ public class GlobalExceptionHandler {
         return respuesta(HttpStatus.NOT_FOUND, ex.getMessage());
     }
 
+    @ExceptionHandler(ReglaNegocioException.class)
+    public ResponseEntity<ErrorResponse> reglaNegocio(ReglaNegocioException ex) {
+        return respuesta(HttpStatus.BAD_REQUEST, ex.getMessage());
+    }
+
+    @ExceptionHandler(OperacionEnCursoException.class)
+    public ResponseEntity<ErrorResponse> operacionEnCurso(OperacionEnCursoException ex) {
+        return respuesta(HttpStatus.CONFLICT, ex.getMessage());
+    }
+
+    @ExceptionHandler(IntegracionExternaException.class)
+    public ResponseEntity<ErrorResponse> integracionExterna(IntegracionExternaException ex) {
+        return respuesta(HttpStatus.BAD_GATEWAY, ex.getMessage());
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ErrorResponse> validacion(MethodArgumentNotValidException ex) {
         Map<String, String> errores = new LinkedHashMap<>();
