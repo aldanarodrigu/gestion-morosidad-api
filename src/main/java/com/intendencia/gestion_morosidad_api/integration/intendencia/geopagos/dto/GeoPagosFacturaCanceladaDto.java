@@ -10,6 +10,8 @@ import java.time.LocalDate;
 public record GeoPagosFacturaCanceladaDto(
         @JsonProperty("CM") Object cm,
         @JsonProperty("NUMERO_PADRON") Object numeroPadron,
+        @JsonProperty("PERSONA") String persona,
+        @JsonProperty("DOCUMENTO") Object documento,
         @JsonProperty("NUMERO_COBRO") Object numeroCobro,
         @JsonProperty("FECHA_COBRO") LocalDate fechaCobro,
         @JsonProperty("IMPORTE_TOTAL") BigDecimal importeTotal) {

@@ -15,6 +15,17 @@ los consumidores actuales de la API.
 como identificador del padrón consultado. El origen no proporciona un identificador de persona,
 por lo que no se agrupan automáticamente padrones de una misma persona.
 
+La sincronización de contribuyentes toma el nombre de `NOMBRE_PERSONAS` y guarda
+`TELEFONO_PERSONAS` y `EMAIL_PERSONAS` como contactos de origen `API_PERSONAS`.
+Los datos de la última transacción (`TELEFONO_GEOPAGOS` y `EMAIL_GEOPAGOS`)
+se guardan con origen `API_GEOPAGOS` y `esDeContribuyente=false`, porque pueden
+pertenecer a quien pagó y no al contribuyente. Las facturas pendientes aportan
+`DOCUMENTO` y contactos de origen `API_FACTURAS_PENDIENTES`, incluido el domicilio.
+Las facturas canceladas pueden completar el documento de un padrón ya conocido sin deuda pendiente.
+Como `contribuyentes-geopagos` no informa `DOCUMENTO`, este campo puede quedar vacío
+si el padrón no aparece en las otras consultas. Los contactos de origen manual
+se conservan al sincronizar.
+
 ## Levantar todo con Docker
 
 Requiere Docker Desktop y el repo del frontend clonado al lado de este:
