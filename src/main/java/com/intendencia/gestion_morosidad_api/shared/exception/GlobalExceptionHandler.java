@@ -9,6 +9,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -87,4 +88,11 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> yaExiste(RecursoYaExisteException ex) {
         return respuesta(HttpStatus.CONFLICT, ex.getMessage());
     }
+
+    /** Login fallido: BadCredentialsException, DisabledException, LockedException, etc. */
+    @ExceptionHandler(AuthenticationException.class)
+    public ResponseEntity<ErrorResponse> credencialesInvalidas(AuthenticationException ex) {
+        return respuesta(HttpStatus.UNAUTHORIZED, "Usuario o contraseña incorrectos");
+    }
+
 }
