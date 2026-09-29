@@ -2,6 +2,9 @@ package com.intendencia.gestion_morosidad_api.modules.sincronizacion.service;
 
 import com.intendencia.gestion_morosidad_api.integration.intendencia.geopagos.dto.GeoPagosFacturaCanceladaDto;
 import com.intendencia.gestion_morosidad_api.integration.intendencia.geopagos.dto.GeoPagosFacturaPendienteDto;
+import com.intendencia.gestion_morosidad_api.modules.contacto.TipoContacto;
+import com.intendencia.gestion_morosidad_api.modules.contacto.service.SincronizacionContactosService;
+import com.intendencia.gestion_morosidad_api.modules.contacto.service.SincronizacionContactosService.Dato;
 import com.intendencia.gestion_morosidad_api.modules.contribuyente.entity.Contribuyente;
 import com.intendencia.gestion_morosidad_api.modules.contribuyente.repository.ContribuyenteRepository;
 import com.intendencia.gestion_morosidad_api.modules.deuda.entity.Deuda;
@@ -24,7 +27,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -49,6 +51,7 @@ class SincronizacionDeudasProcessor {
     private final DeudaRepository deudaRepository;
     private final PadronRepository padronRepository;
     private final ContribuyenteRepository contribuyenteRepository;
+    private final SincronizacionContactosService sincronizacionContactosService;
     private final TributoRepository tributoRepository;
     private final ConfiguracionSegmentoService configuracionSegmentoService;
 
@@ -78,6 +81,7 @@ class SincronizacionDeudasProcessor {
         contribuyenteRepository.saveAll(ctx.contribuyentesNuevos);
         padronRepository.saveAll(ctx.padronesNuevos);
         deudaRepository.saveAll(ctx.deudasNuevas);
+        sincronizacionContactosService.sincronizar(ctx.contactosPendientes);
 
         ResultadoSincronizacion resultado = new ResultadoSincronizacion(
                 inicio, LocalDateTime.now(), pendientes.size(), canceladas.size(),
@@ -123,8 +127,33 @@ class SincronizacionDeudasProcessor {
             contribuyente = new Contribuyente();
             ctx.contribuyentesNuevos.add(contribuyente);
         }
-        contribuyente.setNombre(Objects.requireNonNullElse(limitar(texto(fila.persona()), 255), SIN_NOMBRE));
-        contribuyente.setDocumento(limitar(texto(fila.documento()), 50));
+        String nombre = limitar(texto(fila.persona()), 255);
+        if (nombre != null) {
+            if (contribuyente.getNombre() != null && !contribuyente.getNombre().equals(nombre)) {
+                contribuyente.setDocumento(null);
+                ctx.contactosPendientes.add(new Dato(contribuyente, TipoContacto.TELEFONO,
+                        SincronizacionContactosService.PERSONAS, null, true));
+                ctx.contactosPendientes.add(new Dato(contribuyente, TipoContacto.EMAIL,
+                        SincronizacionContactosService.PERSONAS, null, true));
+            }
+            contribuyente.setNombre(nombre);
+        } else if (contribuyente.getNombre() == null) {
+            contribuyente.setNombre(SIN_NOMBRE);
+        }
+        String documento = limitar(texto(fila.documento()), 50);
+        if (documento != null) {
+            contribuyente.setDocumento(documento);
+        }
+
+        ctx.contactosPendientes.add(new Dato(contribuyente, TipoContacto.TELEFONO,
+                SincronizacionContactosService.PENDIENTES, texto(fila.telefono()), true));
+        ctx.contactosPendientes.add(new Dato(contribuyente, TipoContacto.EMAIL,
+                SincronizacionContactosService.PENDIENTES, fila.email(), true));
+        String calle = texto(fila.direccion());
+        String puerta = texto(fila.numeroPuerta());
+        String domicilio = calle == null ? puerta : puerta == null ? calle : calle + " " + puerta;
+        ctx.contactosPendientes.add(new Dato(contribuyente, TipoContacto.DOMICILIO,
+                SincronizacionContactosService.PENDIENTES, domicilio, true));
 
         padron.setNumeroPadron(limitar(numeroPadron, 100));
         padron.setTipoPadron(limitar(texto(fila.padtipo()), 100));
@@ -187,7 +216,27 @@ class SincronizacionDeudasProcessor {
 
     private void registrarCobros(List<GeoPagosFacturaCanceladaDto> canceladas, Contexto ctx) {
         for (GeoPagosFacturaCanceladaDto cobro : canceladas) {
-            Deuda deuda = ctx.deudasPorCm.get(texto(cobro.cm()));
+            String cm = texto(cobro.cm());
+            // La consulta de contribuyentes no incluye DOCUMENTO. Un cobro reciente puede
+            // completarlo para un padrón que ya no tiene facturas pendientes.
+            if (!ctx.cmsProcesados.contains(cm)) {
+                Padron padron = ctx.padronesPorCm.get(cm);
+                if (padron != null && padron.getContribuyente() != null) {
+                    Contribuyente contribuyente = padron.getContribuyente();
+                    String nombre = texto(cobro.persona());
+                    if (nombre != null) {
+                        if (!nombre.equals(contribuyente.getNombre())) {
+                            contribuyente.setDocumento(null);
+                        }
+                        contribuyente.setNombre(limitar(nombre, 255));
+                    }
+                    String documento = texto(cobro.documento());
+                    if (documento != null) {
+                        contribuyente.setDocumento(limitar(documento, 50));
+                    }
+                }
+            }
+            Deuda deuda = ctx.deudasPorCm.get(cm);
             if (deuda == null || cobro.fechaCobro() == null) {
                 continue;
             }
@@ -226,6 +275,7 @@ class SincronizacionDeudasProcessor {
         final Set<String> cmsProcesados = new HashSet<>();
         final List<Tributo> tributosNuevos = new ArrayList<>();
         final List<Contribuyente> contribuyentesNuevos = new ArrayList<>();
+        final List<Dato> contactosPendientes = new ArrayList<>();
         final List<Padron> padronesNuevos = new ArrayList<>();
         final List<Deuda> deudasNuevas = new ArrayList<>();
         final List<String> advertencias = new ArrayList<>();

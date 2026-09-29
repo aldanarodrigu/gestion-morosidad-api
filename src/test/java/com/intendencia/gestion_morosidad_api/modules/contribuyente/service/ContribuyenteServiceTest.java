@@ -9,6 +9,9 @@ import static org.mockito.Mockito.same;
 import com.intendencia.gestion_morosidad_api.integration.intendencia.common.IntendenciaApiResponse;
 import com.intendencia.gestion_morosidad_api.integration.intendencia.geopagos.client.GeoPagosClient;
 import com.intendencia.gestion_morosidad_api.integration.intendencia.geopagos.dto.GeoPagosContribuyenteDto;
+import com.intendencia.gestion_morosidad_api.modules.contacto.TipoContacto;
+import com.intendencia.gestion_morosidad_api.modules.contacto.service.SincronizacionContactosService;
+import com.intendencia.gestion_morosidad_api.modules.contacto.service.SincronizacionContactosService.Dato;
 import com.intendencia.gestion_morosidad_api.modules.contribuyente.entity.Contribuyente;
 import com.intendencia.gestion_morosidad_api.modules.contribuyente.repository.ContribuyenteRepository;
 import com.intendencia.gestion_morosidad_api.modules.padron.entity.Padron;
@@ -28,6 +31,7 @@ class ContribuyenteServiceTest {
     @Mock private GeoPagosClient geoPagosClient;
     @Mock private ContribuyenteRepository contribuyenteRepository;
     @Mock private PadronRepository padronRepository;
+    @Mock private SincronizacionContactosService sincronizacionContactosService;
     @InjectMocks private ContribuyenteService service;
 
     @Test
@@ -107,5 +111,73 @@ class ContribuyenteServiceTest {
         assertThat(respuesta).hasSize(1);
         assertThat(respuesta.getFirst().cm()).isEqualTo("123");
         assertThat(respuesta.getFirst().nombre()).isEqualTo("Ana Pérez");
+    }
+
+    @Test
+    void sincronizacionImportaContactosDePersonasYDelUltimoGeoPago() {
+        GeoPagosContribuyenteDto fila = new GeoPagosContribuyenteDto(
+                123, 4567, "COM", "San José", null, null, "Ana Pérez",
+                "099123456", "ana@example.test", "Otro pagador", "098765432",
+                "pago@example.test", "2026-09-02 14:30:00");
+        when(geoPagosClient.obtenerContribuyentes())
+                .thenReturn(new IntendenciaApiResponse<>(List.of(fila), null));
+        when(padronRepository.findByCm("123")).thenReturn(Optional.empty());
+        when(contribuyenteRepository.save(any(Contribuyente.class)))
+                .thenAnswer(invocation -> {
+                    Contribuyente c = invocation.getArgument(0);
+                    c.setId(1L);
+                    return c;
+                });
+
+        service.sincronizarDesdeGeoPagos();
+
+        @SuppressWarnings({"unchecked", "rawtypes"})
+        ArgumentCaptor<List<Dato>> captor = ArgumentCaptor.forClass((Class) List.class);
+        verify(sincronizacionContactosService).sincronizar(captor.capture());
+        List<Dato> contactos = captor.getValue();
+        assertThat(contactos).hasSize(4);
+        assertThat(contactos).extracting(Dato::tipo)
+                .containsExactly(TipoContacto.TELEFONO, TipoContacto.EMAIL,
+                        TipoContacto.TELEFONO, TipoContacto.EMAIL);
+        assertThat(contactos).extracting(Dato::origen)
+                .containsExactly(SincronizacionContactosService.PERSONAS,
+                        SincronizacionContactosService.PERSONAS,
+                        SincronizacionContactosService.GEOPAGOS,
+                        SincronizacionContactosService.GEOPAGOS);
+        assertThat(contactos).extracting(Dato::valor)
+                .containsExactly("099123456", "ana@example.test", "098765432", "pago@example.test");
+        assertThat(contactos).extracting(Dato::esDeContribuyente)
+                .containsExactly(true, true, false, false);
+        assertThat(contactos).allSatisfy(dato -> assertThat(dato.contribuyente().getId()).isEqualTo(1L));
+    }
+
+    @Test
+    void sincronizacionMantieneDocumentoSiEsLaMismaPersonaYLoLimpiaSiCambia() {
+        Contribuyente contribuyente = new Contribuyente();
+        contribuyente.setNombre("Ana Pérez");
+        contribuyente.setDocumento("1234567-8");
+        Padron padron = new Padron();
+        padron.setContribuyente(contribuyente);
+        when(padronRepository.findByCm("123")).thenReturn(Optional.of(padron));
+        when(contribuyenteRepository.save(same(contribuyente))).thenReturn(contribuyente);
+        when(geoPagosClient.obtenerContribuyentes()).thenReturn(new IntendenciaApiResponse<>(List.of(
+                new GeoPagosContribuyenteDto(123, 4567, "COM", null, null, null,
+                        "Ana Pérez", null, null, null, null, null, null)), null));
+
+        service.sincronizarDesdeGeoPagos();
+        assertThat(contribuyente.getDocumento()).isEqualTo("1234567-8");
+
+        when(geoPagosClient.obtenerContribuyentes()).thenReturn(new IntendenciaApiResponse<>(List.of(
+                new GeoPagosContribuyenteDto(123, 4567, "COM", null, null, null,
+                        "Luis Gómez", null, null, null, null, null, null)), null));
+        service.sincronizarDesdeGeoPagos();
+        assertThat(contribuyente.getNombre()).isEqualTo("Luis Gómez");
+        assertThat(contribuyente.getDocumento()).isNull();
+        @SuppressWarnings({"unchecked", "rawtypes"})
+        ArgumentCaptor<List<Dato>> captor = ArgumentCaptor.forClass((Class) List.class);
+        verify(sincronizacionContactosService, org.mockito.Mockito.times(2)).sincronizar(captor.capture());
+        assertThat(captor.getAllValues().getLast()).filteredOn(dato ->
+                dato.origen().equals(SincronizacionContactosService.PENDIENTES))
+                .hasSize(3).allSatisfy(dato -> assertThat(dato.valor()).isNull());
     }
 }
