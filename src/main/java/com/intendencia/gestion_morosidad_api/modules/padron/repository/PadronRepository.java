@@ -1,5 +1,6 @@
 package com.intendencia.gestion_morosidad_api.modules.padron.repository;
 
+import com.intendencia.gestion_morosidad_api.modules.contribuyente.entity.Contribuyente;
 import com.intendencia.gestion_morosidad_api.modules.padron.entity.Padron;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -16,6 +17,9 @@ public interface PadronRepository extends JpaRepository<Padron, Long> {
 
     @EntityGraph(attributePaths = "contribuyente")
     Optional<Padron> findByNumeroPadron(String numeroPadron);
+
+    @EntityGraph(attributePaths = "contribuyente")
+    List<Padron> findByContribuyenteOrderByNumeroPadronAsc(Contribuyente contribuyente);
 
     @Override
     @EntityGraph(attributePaths = "contribuyente")

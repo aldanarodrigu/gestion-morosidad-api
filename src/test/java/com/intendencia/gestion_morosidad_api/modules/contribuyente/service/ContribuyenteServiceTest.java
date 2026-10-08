@@ -1,10 +1,11 @@
 package com.intendencia.gestion_morosidad_api.modules.contribuyente.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.same;
+import static org.mockito.Mockito.never;
+import static org.mockito.ArgumentMatchers.any;
 
 import com.intendencia.gestion_morosidad_api.integration.intendencia.common.IntendenciaApiResponse;
 import com.intendencia.gestion_morosidad_api.integration.intendencia.geopagos.client.GeoPagosClient;
@@ -106,11 +107,124 @@ class ContribuyenteServiceTest {
                 .thenReturn(new IntendenciaApiResponse<>(List.of(), null));
         when(padronRepository.findAll()).thenReturn(List.of(padron));
 
-        var respuesta = service.listarContribuyentes();
+        var respuesta = service.listarContribuyentes(null, null);
 
         assertThat(respuesta).hasSize(1);
         assertThat(respuesta.getFirst().cm()).isEqualTo("123");
         assertThat(respuesta.getFirst().nombre()).isEqualTo("Ana Pérez");
+    }
+
+    @Test
+    void listadoSinFiltrosIncluyeTodosInclusoSinDocumento() {
+        Padron ana = padron("123", "4567", "Ana Pérez", "1234567-8");
+        Padron luis = padron("124", "4568", "Luis Gómez", null);
+        when(geoPagosClient.obtenerContribuyentes())
+                .thenReturn(new IntendenciaApiResponse<>(List.of(), null));
+        when(padronRepository.findAll()).thenReturn(List.of(ana, luis));
+
+        var respuesta = service.listarContribuyentes("  ", null);
+
+        assertThat(respuesta).extracting(r -> r.cm()).containsExactly("123", "124");
+    }
+
+    @Test
+    void filtraPorNombreParcialSinDistinguirMayusculas() {
+        when(geoPagosClient.obtenerContribuyentes())
+                .thenReturn(new IntendenciaApiResponse<>(List.of(), null));
+        when(padronRepository.findAll()).thenReturn(List.of(
+                padron("123", "4567", "Ana Pérez", "1234567-8"),
+                padron("124", "4568", "Luis Gómez", "8765432-1")));
+
+        var respuesta = service.listarContribuyentes("  pÉReZ  ", null);
+
+        assertThat(respuesta).extracting(r -> r.cm()).containsExactly("123");
+    }
+
+    @Test
+    void filtraPorDocumentoParcialYExcluyeValoresNulos() {
+        when(geoPagosClient.obtenerContribuyentes())
+                .thenReturn(new IntendenciaApiResponse<>(List.of(), null));
+        when(padronRepository.findAll()).thenReturn(List.of(
+                padron("123", "4567", "Ana Pérez", "AB-123"),
+                padron("124", "4568", "Luis Gómez", null),
+                padron("125", "4569", "Eva Díaz", "CD-456")));
+
+        var respuesta = service.listarContribuyentes(null, " b-12 ");
+
+        assertThat(respuesta).extracting(r -> r.cm()).containsExactly("123");
+    }
+
+    @Test
+    void ambosFiltrosSeAplicanAlMismoContribuyente() {
+        when(geoPagosClient.obtenerContribuyentes())
+                .thenReturn(new IntendenciaApiResponse<>(List.of(), null));
+        when(padronRepository.findAll()).thenReturn(List.of(
+                padron("123", "4567", "Ana Pérez", "ABC-123"),
+                padron("124", "4568", "Ana López", "XYZ-999"),
+                padron("125", "4569", "Luis Gómez", "ABC-123")));
+
+        var respuesta = service.listarContribuyentes("ana", "abc");
+
+        assertThat(respuesta).extracting(r -> r.cm()).containsExactly("123");
+    }
+
+    @Test
+    void listaTodosLosPadronesVinculadosAlContribuyenteDelCm() {
+        Contribuyente contribuyente = new Contribuyente();
+        contribuyente.setNombre("Ana Pérez");
+        Padron primero = new Padron();
+        primero.setCm("123");
+        primero.setNumeroPadron("4567");
+        primero.setContribuyente(contribuyente);
+        Padron segundo = new Padron();
+        segundo.setCm("124");
+        segundo.setNumeroPadron("4568");
+        segundo.setContribuyente(contribuyente);
+        when(padronRepository.findByCm("124")).thenReturn(Optional.of(segundo));
+        when(padronRepository.findByContribuyenteOrderByNumeroPadronAsc(contribuyente))
+                .thenReturn(List.of(primero, segundo));
+
+        var respuesta = service.listarPadronesPorCm("124").orElseThrow();
+
+        assertThat(respuesta).extracting(r -> r.numeroPadron()).containsExactly("4567", "4568");
+        assertThat(respuesta).extracting(r -> r.cm()).containsExactly("123", "124");
+        assertThat(respuesta).allSatisfy(r -> assertThat(r.contribuyente().nombre()).isEqualTo("Ana Pérez"));
+    }
+
+    @Test
+    void padronesPorCmInexistenteDevuelveAusenciaTrasIntentarSincronizar() {
+        when(geoPagosClient.obtenerContribuyentes())
+                .thenReturn(new IntendenciaApiResponse<>(List.of(), null));
+
+        assertThat(service.listarPadronesPorCm("999")).isEmpty();
+
+        verify(padronRepository, never()).findByContribuyenteOrderByNumeroPadronAsc(any());
+        verify(geoPagosClient).obtenerContribuyentes();
+    }
+
+    @Test
+    void padronesPorCmDesconocidoSeReintentaDespuesDeSincronizar() {
+        Padron padron = padron("123", "4567", "Ana Pérez", null);
+        when(padronRepository.findByCm("123"))
+                .thenReturn(Optional.empty(), Optional.of(padron));
+        when(geoPagosClient.obtenerContribuyentes())
+                .thenReturn(new IntendenciaApiResponse<>(List.of(), null));
+        when(padronRepository.findByContribuyenteOrderByNumeroPadronAsc(padron.getContribuyente()))
+                .thenReturn(List.of(padron));
+
+        assertThat(service.listarPadronesPorCm("123").orElseThrow())
+                .extracting(r -> r.numeroPadron()).containsExactly("4567");
+    }
+
+    private static Padron padron(String cm, String numeroPadron, String nombre, String documento) {
+        Contribuyente contribuyente = new Contribuyente();
+        contribuyente.setNombre(nombre);
+        contribuyente.setDocumento(documento);
+        Padron padron = new Padron();
+        padron.setCm(cm);
+        padron.setNumeroPadron(numeroPadron);
+        padron.setContribuyente(contribuyente);
+        return padron;
     }
 
     @Test
