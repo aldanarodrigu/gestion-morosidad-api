@@ -14,6 +14,8 @@ import com.intendencia.gestion_morosidad_api.modules.contacto.service.Sincroniza
 import com.intendencia.gestion_morosidad_api.modules.contribuyente.entity.Contribuyente;
 import com.intendencia.gestion_morosidad_api.modules.contribuyente.repository.ContribuyenteRepository;
 import com.intendencia.gestion_morosidad_api.modules.deuda.repository.DeudaRepository;
+import com.intendencia.gestion_morosidad_api.modules.deuda.entity.Deuda;
+import com.intendencia.gestion_morosidad_api.modules.deuda.entity.EstadoDeuda;
 import com.intendencia.gestion_morosidad_api.modules.padron.entity.Padron;
 import com.intendencia.gestion_morosidad_api.modules.padron.repository.PadronRepository;
 import com.intendencia.gestion_morosidad_api.modules.segmento.service.ConfiguracionSegmentoService;
@@ -25,6 +27,9 @@ import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -205,5 +210,72 @@ class SincronizacionDeudasProcessorTest {
         assertThat(captor.getValue()).filteredOn(dato ->
                 dato.origen().equals(SincronizacionContactosService.PERSONAS))
                 .hasSize(2).allSatisfy(dato -> assertThat(dato.valor()).isNull());
+    }
+
+    @ParameterizedTest
+    @NullSource
+    @ValueSource(strings = {"0.00", "-10.00"})
+    void noCreaContribuyentePadronNiDeudaSinImportePositivo(String importe) {
+        var resultado = procesarImporte(importe == null ? null : new BigDecimal(importe));
+
+        assertThat(resultado.deudasCreadas()).isZero();
+        assertThat(resultado.registrosOmitidos()).isEqualTo(1);
+        verify(contribuyenteRepository).saveAll(argThat(nuevos -> !nuevos.iterator().hasNext()));
+        verify(padronRepository).saveAll(argThat(nuevos -> !nuevos.iterator().hasNext()));
+        verify(deudaRepository).saveAll(argThat(nuevos -> !nuevos.iterator().hasNext()));
+        verify(sincronizacionContactosService).sincronizar(List.of());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"0.00", "-10.00"})
+    void saldoNoPositivoCancelaLaDeudaExistenteConservandoSuIdentidad(String importe) {
+        Deuda deuda = deudaExistente();
+        when(deudaRepository.findAllConPadron()).thenReturn(List.of(deuda));
+
+        var resultado = procesarImporte(new BigDecimal(importe));
+
+        assertThat(resultado.deudasCanceladas()).isEqualTo(1);
+        assertThat(resultado.deudasCreadas()).isZero();
+        assertThat(deuda.getId()).isEqualTo(1L);
+        assertThat(deuda.getEstado()).isEqualTo(EstadoDeuda.CANCELADA);
+        assertThat(deuda.getImporte()).isEqualByComparingTo(importe);
+        assertThat(deuda.getSegmentoMora()).isNull();
+        assertThat(deuda.getFechaSincronizacion()).isNotNull();
+    }
+
+    @Test
+    void importeDesconocidoNoCancelaNiReemplazaElSaldoDeUnaDeudaExistente() {
+        Deuda deuda = deudaExistente();
+        when(deudaRepository.findAllConPadron()).thenReturn(List.of(deuda));
+
+        var resultado = procesarImporte(null);
+
+        assertThat(resultado.deudasCanceladas()).isZero();
+        assertThat(resultado.registrosOmitidos()).isEqualTo(1);
+        assertThat(deuda.getEstado()).isEqualTo(EstadoDeuda.EN_GESTION);
+        assertThat(deuda.getImporte()).isEqualByComparingTo("100.00");
+        assertThat(deuda.getFechaSincronizacion()).isNull();
+    }
+
+    private com.intendencia.gestion_morosidad_api.modules.sincronizacion.dto.ResultadoSincronizacion
+            procesarImporte(BigDecimal importe) {
+        GeoPagosFacturaPendienteDto fila = new GeoPagosFacturaPendienteDto(
+                123, 4567, null, null, "COM", null, "Ana Pérez", null,
+                null, null, null, null, "NO", null, importe,
+                LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 1), "2026");
+        return processor.procesar(List.of(fila), List.of(),
+                LocalDate.of(2026, 9, 24), LocalDateTime.of(2026, 9, 24, 12, 0));
+    }
+
+    private static Deuda deudaExistente() {
+        Padron padron = new Padron();
+        padron.setCm("123");
+        padron.setNumeroPadron("4567");
+        Deuda deuda = new Deuda();
+        deuda.setId(1L);
+        deuda.setPadron(padron);
+        deuda.setEstado(EstadoDeuda.EN_GESTION);
+        deuda.setImporte(new BigDecimal("100.00"));
+        return deuda;
     }
 }

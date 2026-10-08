@@ -28,7 +28,20 @@ se conservan al sincronizar.
 
 `GET /api/contribuyentes` acepta los parámetros opcionales `nombre` y `documento`.
 Cada filtro busca una coincidencia parcial sin distinguir mayúsculas; si se envían ambos,
-deben coincidir en el mismo contribuyente. Sin parámetros devuelve el listado completo.
+deben coincidir en el mismo contribuyente. Solo devuelve contribuyentes de padrones que
+aparecen en `/facturas/pendientes` con `IMPORTE_DEUDA > 0`. La sincronización consulta
+primero esa deuda y cruza los resultados por CM antes de importar los datos y contactos
+de `/contribuyentes-geopagos`. Los padrones sin deuda, con importe cero, negativo o nulo
+no se importan. GeoPagos no ofrece un filtro para su consulta de contribuyentes: el
+backend recibe esa respuesta completa y filtra antes de persistirla.
+
+Los contribuyentes y padrones ya existentes se conservan para mantener el historial,
+pero quedan fuera de este listado cuando dejan de tener deuda vencida positiva.
+`GET /api/deudas` muestra por defecto deudas no canceladas con importe mayor que cero;
+`?estado=CANCELADA` permite consultar las canceladas. Las consultas individuales y por
+padrón siguen disponibles para revisar el historial. Un importe nulo no cancela una
+deuda existente: se omite hasta recibir un importe válido.
+
 `GET /api/contribuyentes/{cm}/padrones` devuelve los padrones vinculados al contribuyente
 del CM indicado, o 404 si no existe ese CM. No agrupa personas distintas por nombre o documento.
 
