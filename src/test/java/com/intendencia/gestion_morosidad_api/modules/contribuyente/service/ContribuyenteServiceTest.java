@@ -1,15 +1,22 @@
 package com.intendencia.gestion_morosidad_api.modules.contribuyente.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.same;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.ArgumentMatchers.any;
 
 import com.intendencia.gestion_morosidad_api.integration.intendencia.common.IntendenciaApiResponse;
 import com.intendencia.gestion_morosidad_api.integration.intendencia.geopagos.client.GeoPagosClient;
 import com.intendencia.gestion_morosidad_api.integration.intendencia.geopagos.dto.GeoPagosContribuyenteDto;
+import com.intendencia.gestion_morosidad_api.integration.intendencia.geopagos.dto.GeoPagosFacturaPendienteDto;
+import com.intendencia.gestion_morosidad_api.shared.exception.IntegracionExternaException;
+import java.math.BigDecimal;
+import java.util.Arrays;
+import java.util.Set;
 import com.intendencia.gestion_morosidad_api.modules.contacto.TipoContacto;
 import com.intendencia.gestion_morosidad_api.modules.contacto.service.SincronizacionContactosService;
 import com.intendencia.gestion_morosidad_api.modules.contacto.service.SincronizacionContactosService.Dato;
@@ -40,6 +47,7 @@ class ContribuyenteServiceTest {
         GeoPagosContribuyenteDto fila = new GeoPagosContribuyenteDto(
                 123, 4567, "COM", "San José", null, null, "Ana Pérez",
                 null, null, null, null, null, null);
+        pendientes("123", "124", "125");
         when(geoPagosClient.obtenerContribuyentes())
                 .thenReturn(new IntendenciaApiResponse<>(List.of(fila), null));
         when(padronRepository.findByCm("123")).thenReturn(Optional.empty());
@@ -68,6 +76,7 @@ class ContribuyenteServiceTest {
         GeoPagosContribuyenteDto fila = new GeoPagosContribuyenteDto(
                 123, 4567, "COM", "San José", null, null, "Ana Pérez",
                 null, null, null, null, null, null);
+        pendientes("123", "124", "125");
         when(geoPagosClient.obtenerContribuyentes())
                 .thenReturn(new IntendenciaApiResponse<>(List.of(fila), null));
         when(padronRepository.findByCm("123")).thenReturn(Optional.of(padron));
@@ -103,9 +112,10 @@ class ContribuyenteServiceTest {
         Padron padron = new Padron();
         padron.setCm("123");
         padron.setContribuyente(contribuyente);
+        pendientes("123", "124", "125");
         when(geoPagosClient.obtenerContribuyentes())
                 .thenReturn(new IntendenciaApiResponse<>(List.of(), null));
-        when(padronRepository.findAll()).thenReturn(List.of(padron));
+        when(padronRepository.findByCmIn(any())).thenReturn(List.of(padron));
 
         var respuesta = service.listarContribuyentes(null, null);
 
@@ -115,12 +125,13 @@ class ContribuyenteServiceTest {
     }
 
     @Test
-    void listadoSinFiltrosIncluyeTodosInclusoSinDocumento() {
+    void listadoSinFiltrosIncluyeDeudoresInclusoSinDocumento() {
         Padron ana = padron("123", "4567", "Ana Pérez", "1234567-8");
         Padron luis = padron("124", "4568", "Luis Gómez", null);
+        pendientes("123", "124", "125");
         when(geoPagosClient.obtenerContribuyentes())
                 .thenReturn(new IntendenciaApiResponse<>(List.of(), null));
-        when(padronRepository.findAll()).thenReturn(List.of(ana, luis));
+        when(padronRepository.findByCmIn(any())).thenReturn(List.of(ana, luis));
 
         var respuesta = service.listarContribuyentes("  ", null);
 
@@ -129,9 +140,10 @@ class ContribuyenteServiceTest {
 
     @Test
     void filtraPorNombreParcialSinDistinguirMayusculas() {
+        pendientes("123", "124", "125");
         when(geoPagosClient.obtenerContribuyentes())
                 .thenReturn(new IntendenciaApiResponse<>(List.of(), null));
-        when(padronRepository.findAll()).thenReturn(List.of(
+        when(padronRepository.findByCmIn(any())).thenReturn(List.of(
                 padron("123", "4567", "Ana Pérez", "1234567-8"),
                 padron("124", "4568", "Luis Gómez", "8765432-1")));
 
@@ -142,9 +154,10 @@ class ContribuyenteServiceTest {
 
     @Test
     void filtraPorDocumentoParcialYExcluyeValoresNulos() {
+        pendientes("123", "124", "125");
         when(geoPagosClient.obtenerContribuyentes())
                 .thenReturn(new IntendenciaApiResponse<>(List.of(), null));
-        when(padronRepository.findAll()).thenReturn(List.of(
+        when(padronRepository.findByCmIn(any())).thenReturn(List.of(
                 padron("123", "4567", "Ana Pérez", "AB-123"),
                 padron("124", "4568", "Luis Gómez", null),
                 padron("125", "4569", "Eva Díaz", "CD-456")));
@@ -156,9 +169,10 @@ class ContribuyenteServiceTest {
 
     @Test
     void ambosFiltrosSeAplicanAlMismoContribuyente() {
+        pendientes("123", "124", "125");
         when(geoPagosClient.obtenerContribuyentes())
                 .thenReturn(new IntendenciaApiResponse<>(List.of(), null));
-        when(padronRepository.findAll()).thenReturn(List.of(
+        when(padronRepository.findByCmIn(any())).thenReturn(List.of(
                 padron("123", "4567", "Ana Pérez", "ABC-123"),
                 padron("124", "4568", "Ana López", "XYZ-999"),
                 padron("125", "4569", "Luis Gómez", "ABC-123")));
@@ -193,6 +207,7 @@ class ContribuyenteServiceTest {
 
     @Test
     void padronesPorCmInexistenteDevuelveAusenciaTrasIntentarSincronizar() {
+        pendientes("123", "124", "125");
         when(geoPagosClient.obtenerContribuyentes())
                 .thenReturn(new IntendenciaApiResponse<>(List.of(), null));
 
@@ -207,6 +222,7 @@ class ContribuyenteServiceTest {
         Padron padron = padron("123", "4567", "Ana Pérez", null);
         when(padronRepository.findByCm("123"))
                 .thenReturn(Optional.empty(), Optional.of(padron));
+        pendientes("123", "124", "125");
         when(geoPagosClient.obtenerContribuyentes())
                 .thenReturn(new IntendenciaApiResponse<>(List.of(), null));
         when(padronRepository.findByContribuyenteOrderByNumeroPadronAsc(padron.getContribuyente()))
@@ -233,6 +249,7 @@ class ContribuyenteServiceTest {
                 123, 4567, "COM", "San José", null, null, "Ana Pérez",
                 "099123456", "ana@example.test", "Otro pagador", "098765432",
                 "pago@example.test", "2026-09-02 14:30:00");
+        pendientes("123", "124", "125");
         when(geoPagosClient.obtenerContribuyentes())
                 .thenReturn(new IntendenciaApiResponse<>(List.of(fila), null));
         when(padronRepository.findByCm("123")).thenReturn(Optional.empty());
@@ -274,6 +291,7 @@ class ContribuyenteServiceTest {
         padron.setContribuyente(contribuyente);
         when(padronRepository.findByCm("123")).thenReturn(Optional.of(padron));
         when(contribuyenteRepository.save(same(contribuyente))).thenReturn(contribuyente);
+        pendientes("123", "124", "125");
         when(geoPagosClient.obtenerContribuyentes()).thenReturn(new IntendenciaApiResponse<>(List.of(
                 new GeoPagosContribuyenteDto(123, 4567, "COM", null, null, null,
                         "Ana Pérez", null, null, null, null, null, null)), null));
@@ -281,6 +299,7 @@ class ContribuyenteServiceTest {
         service.sincronizarDesdeGeoPagos();
         assertThat(contribuyente.getDocumento()).isEqualTo("1234567-8");
 
+        pendientes("123", "124", "125");
         when(geoPagosClient.obtenerContribuyentes()).thenReturn(new IntendenciaApiResponse<>(List.of(
                 new GeoPagosContribuyenteDto(123, 4567, "COM", null, null, null,
                         "Luis Gómez", null, null, null, null, null, null)), null));
@@ -294,4 +313,82 @@ class ContribuyenteServiceTest {
                 dato.origen().equals(SincronizacionContactosService.PENDIENTES))
                 .hasSize(3).allSatisfy(dato -> assertThat(dato.valor()).isNull());
     }
+    @Test
+    void importaSoloLosCmConDeudaPositivaYNormalizaIdentificadores() {
+        when(geoPagosClient.obtenerFacturasPendientes()).thenReturn(new IntendenciaApiResponse<>(List.of(
+                pendiente(new BigDecimal("123.00"), new BigDecimal("100.00")),
+                pendiente(124, BigDecimal.ZERO),
+                pendiente(125, new BigDecimal("-10.00")),
+                pendiente(126, null)), null));
+        when(geoPagosClient.obtenerContribuyentes()).thenReturn(new IntendenciaApiResponse<>(List.of(
+                contribuyente(" 123 "), contribuyente(124), contribuyente(125),
+                contribuyente(126), contribuyente(127)), null));
+        when(contribuyenteRepository.save(any(Contribuyente.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+        service.sincronizarDesdeGeoPagos();
+
+        ArgumentCaptor<Padron> captor = ArgumentCaptor.forClass(Padron.class);
+        verify(padronRepository).save(captor.capture());
+        assertThat(captor.getValue().getCm()).isEqualTo("123");
+        verify(padronRepository, never()).findByCm("124");
+        verify(padronRepository, never()).findByCm("125");
+        verify(padronRepository, never()).findByCm("126");
+        verify(padronRepository, never()).findByCm("127");
+    }
+
+    @Test
+    void listadoConsultaSoloLosCmConDeudaAunqueYaExistanOtrosEnLaBase() {
+        pendientes("123");
+        when(geoPagosClient.obtenerContribuyentes())
+                .thenReturn(new IntendenciaApiResponse<>(List.of(), null));
+        when(padronRepository.findByCmIn(Set.of("123")))
+                .thenReturn(List.of(padron("123", "4567", "Ana Pérez", null)));
+
+        assertThat(service.listarContribuyentes(null, null)).extracting(r -> r.cm())
+                .containsExactly("123");
+        verify(padronRepository).findByCmIn(Set.of("123"));
+        verify(padronRepository, never()).findAll();
+    }
+
+    @Test
+    void sinDeudaPositivaNoConsultaNiImportaElListadoCompletoDeContribuyentes() {
+        when(geoPagosClient.obtenerFacturasPendientes()).thenReturn(new IntendenciaApiResponse<>(List.of(
+                pendiente(123, BigDecimal.ZERO), pendiente(124, new BigDecimal("-1")),
+                pendiente(125, null)), null));
+
+        assertThat(service.listarContribuyentes(null, null)).isEmpty();
+
+        verify(geoPagosClient, never()).obtenerContribuyentes();
+        verifyNoInteractions(padronRepository, contribuyenteRepository, sincronizacionContactosService);
+    }
+
+    @Test
+    void respuestaDePendientesSinDatosFallaSinImportarContribuyentes() {
+        when(geoPagosClient.obtenerFacturasPendientes())
+                .thenReturn(new IntendenciaApiResponse<>(null, null));
+
+        assertThatThrownBy(service::sincronizarDesdeGeoPagos)
+                .isInstanceOf(IntegracionExternaException.class);
+
+        verify(geoPagosClient, never()).obtenerContribuyentes();
+        verifyNoInteractions(padronRepository, contribuyenteRepository, sincronizacionContactosService);
+    }
+
+    private void pendientes(String... cms) {
+        when(geoPagosClient.obtenerFacturasPendientes()).thenReturn(new IntendenciaApiResponse<>(
+                Arrays.stream(cms).map(cm -> pendiente(cm, new BigDecimal("100.00"))).toList(), null));
+    }
+
+    private static GeoPagosFacturaPendienteDto pendiente(Object cm, BigDecimal importe) {
+        return new GeoPagosFacturaPendienteDto(cm, 4567, null, null, "COM", null,
+                "Ana Pérez", null, null, null, null, null, "NO", null, importe,
+                null, null, null);
+    }
+
+    private static GeoPagosContribuyenteDto contribuyente(Object cm) {
+        return new GeoPagosContribuyenteDto(cm, 4567, "COM", null, null, null,
+                "Ana Pérez", null, null, null, null, null, null);
+    }
+
 }

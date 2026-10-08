@@ -104,6 +104,22 @@ class SincronizacionDeudasProcessor {
             ctx.omitir("CM " + cm + " repetido en la respuesta de GeoPagos");
             return;
         }
+        if (fila.importeDeuda() == null) {
+            // Un importe desconocido no demuestra que se haya saldado una deuda existente.
+            ctx.omitir("CM " + cm + ": importe de deuda no informado");
+            return;
+        }
+        if (fila.importeDeuda().signum() <= 0) {
+            // No crear contribuyentes ni padrones sin saldo vencido positivo.
+            // Si existía una deuda, conservarla cancelada junto con sus gestiones.
+            Deuda existente = ctx.deudasPorCm.get(cm);
+            if (existente != null) {
+                existente.setImporte(fila.importeDeuda());
+                cancelarDeuda(existente, ctx);
+            }
+            ctx.omitir("CM " + cm + ": sin deuda vencida positiva");
+            return;
+        }
         String cmConEseNumero = ctx.cmPorNumeroPadron.get(numeroPadron);
         if (cmConEseNumero != null && !cmConEseNumero.equals(cm)) {
             // padrones.numero_padron es único: dos CM con el mismo número no se pueden guardar
@@ -206,12 +222,18 @@ class SincronizacionDeudasProcessor {
     private void cancelarDeudasQueYaNoEstanPendientes(Contexto ctx) {
         ctx.deudasPorCm.forEach((cm, deuda) -> {
             if (!ctx.cmsProcesados.contains(cm) && deuda.getEstado() != EstadoDeuda.CANCELADA) {
-                deuda.setEstado(EstadoDeuda.CANCELADA);
-                deuda.setSegmentoMora(null);
-                deuda.setFechaSincronizacion(ctx.ahora);
-                ctx.canceladas++;
+                cancelarDeuda(deuda, ctx);
             }
         });
+    }
+
+    private void cancelarDeuda(Deuda deuda, Contexto ctx) {
+        if (deuda.getEstado() != EstadoDeuda.CANCELADA) {
+            ctx.canceladas++;
+        }
+        deuda.setEstado(EstadoDeuda.CANCELADA);
+        deuda.setSegmentoMora(null);
+        deuda.setFechaSincronizacion(ctx.ahora);
     }
 
     private void registrarCobros(List<GeoPagosFacturaCanceladaDto> canceladas, Contexto ctx) {

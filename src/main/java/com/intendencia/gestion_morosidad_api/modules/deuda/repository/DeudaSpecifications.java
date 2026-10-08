@@ -2,10 +2,12 @@ package com.intendencia.gestion_morosidad_api.modules.deuda.repository;
 
 import com.intendencia.gestion_morosidad_api.modules.deuda.dto.DeudaFiltro;
 import com.intendencia.gestion_morosidad_api.modules.deuda.entity.Deuda;
+import com.intendencia.gestion_morosidad_api.modules.deuda.entity.EstadoDeuda;
 import com.intendencia.gestion_morosidad_api.modules.contribuyente.entity.Contribuyente;
 import com.intendencia.gestion_morosidad_api.modules.padron.entity.Padron;
 import jakarta.persistence.criteria.Path;
 import jakarta.persistence.criteria.Predicate;
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -25,6 +27,12 @@ public final class DeudaSpecifications {
 
             if (filtro.estado() != null) {
                 predicados.add(cb.equal(root.get("estado"), filtro.estado()));
+            } else {
+                predicados.add(cb.notEqual(root.get("estado"), EstadoDeuda.CANCELADA));
+            }
+            // La cartera muestra saldo gestionable; CANCELADA permite consultar el historial.
+            if (filtro.estado() != EstadoDeuda.CANCELADA) {
+                predicados.add(cb.greaterThan(root.get("importe"), BigDecimal.ZERO));
             }
             Path<Padron> padron = root.get("padron");
             if (tieneTexto(filtro.padron())) {

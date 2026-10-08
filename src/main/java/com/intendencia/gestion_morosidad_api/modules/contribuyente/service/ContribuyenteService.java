@@ -11,14 +11,19 @@ import com.intendencia.gestion_morosidad_api.modules.contribuyente.repository.Co
 import com.intendencia.gestion_morosidad_api.modules.padron.entity.Padron;
 import com.intendencia.gestion_morosidad_api.modules.padron.dto.PadronResponse;
 import com.intendencia.gestion_morosidad_api.modules.padron.repository.PadronRepository;
+import com.intendencia.gestion_morosidad_api.shared.exception.IntegracionExternaException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -32,11 +37,15 @@ public class ContribuyenteService {
     @Transactional
     public List<ContribuyenteResponse> listarContribuyentes(String nombre, String documento) {
 
-        sincronizarDesdeGeoPagos();
+        Set<String> cmsConDeuda = sincronizarContribuyentesConDeuda();
+
+        if (cmsConDeuda.isEmpty()) {
+            return List.of();
+        }
 
         String filtroNombre = normalizarFiltro(nombre);
         String filtroDocumento = normalizarFiltro(documento);
-        return padronRepository.findAll()
+        return padronRepository.findByCmIn(cmsConDeuda)
                 .stream()
                 .filter(padron -> coincide(padron.getContribuyente().getNombre(), filtroNombre)
                         && coincide(padron.getContribuyente().getDocumento(), filtroDocumento))
@@ -78,16 +87,38 @@ public class ContribuyenteService {
 
     @Transactional
     public void sincronizarDesdeGeoPagos() {
+        sincronizarContribuyentesConDeuda();
+    }
+
+    private Set<String> sincronizarContribuyentesConDeuda() {
+        // Contribuyentes incluye todos los padrones activos. Solo pendientes informa
+        // quién tiene deuda vencida, por lo que se cruza por CM antes de persistir.
+        var pendientes = geoPagosClient.obtenerFacturasPendientes();
+        if (pendientes == null || pendientes.getData() == null) {
+            throw new IntegracionExternaException("GeoPagos no devolvió datos de facturas pendientes");
+        }
+        Set<String> cmsConDeuda = pendientes.getData().stream()
+                .filter(fila -> fila.importeDeuda() != null && fila.importeDeuda().signum() > 0)
+                .map(fila -> convertirAString(fila.cm()))
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        if (cmsConDeuda.isEmpty()) {
+            return cmsConDeuda;
+        }
 
         var respuesta = geoPagosClient.obtenerContribuyentes();
 
         if (respuesta == null || respuesta.getData() == null) {
-            return;
+            throw new IntegracionExternaException("GeoPagos no devolvió datos de contribuyentes");
         }
 
         List<Dato> contactos = new ArrayList<>();
-        respuesta.getData().forEach(dto -> guardarOActualizar(dto, contactos));
+        respuesta.getData().stream()
+                .filter(dto -> cmsConDeuda.contains(convertirAString(dto.cm())))
+                .forEach(dto -> guardarOActualizar(dto, contactos));
         sincronizacionContactosService.sincronizar(contactos);
+        return cmsConDeuda;
     }
 
     private void guardarOActualizar(GeoPagosContribuyenteDto dto, List<Dato> contactos) {
@@ -148,6 +179,12 @@ public class ContribuyenteService {
     }
 
     private String convertirAString(Object valor) {
-        return valor != null ? valor.toString() : null;
+        if (valor == null) {
+            return null;
+        }
+        String texto = valor instanceof Number numero
+                ? new BigDecimal(numero.toString()).stripTrailingZeros().toPlainString()
+                : valor.toString().trim();
+        return texto.isEmpty() ? null : texto;
     }
 }
