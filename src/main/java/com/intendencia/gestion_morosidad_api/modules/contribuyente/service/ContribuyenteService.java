@@ -9,6 +9,7 @@ import com.intendencia.gestion_morosidad_api.modules.contribuyente.dto.Contribuy
 import com.intendencia.gestion_morosidad_api.modules.contribuyente.entity.Contribuyente;
 import com.intendencia.gestion_morosidad_api.modules.contribuyente.repository.ContribuyenteRepository;
 import com.intendencia.gestion_morosidad_api.modules.padron.entity.Padron;
+import com.intendencia.gestion_morosidad_api.modules.padron.dto.PadronResponse;
 import com.intendencia.gestion_morosidad_api.modules.padron.repository.PadronRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -16,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 
 @Service
@@ -28,27 +30,50 @@ public class ContribuyenteService {
     private final SincronizacionContactosService sincronizacionContactosService;
 
     @Transactional
-    public List<ContribuyenteResponse> listarContribuyentes() {
+    public List<ContribuyenteResponse> listarContribuyentes(String nombre, String documento) {
 
         sincronizarDesdeGeoPagos();
 
+        String filtroNombre = normalizarFiltro(nombre);
+        String filtroDocumento = normalizarFiltro(documento);
         return padronRepository.findAll()
                 .stream()
+                .filter(padron -> coincide(padron.getContribuyente().getNombre(), filtroNombre)
+                        && coincide(padron.getContribuyente().getDocumento(), filtroDocumento))
                 .map(ContribuyenteResponse::de)
                 .toList();
     }
 
     @Transactional
     public Optional<ContribuyenteResponse> buscarPorCm(String cm) {
+        return buscarPadronPorCm(cm).map(ContribuyenteResponse::de);
+    }
 
+    @Transactional
+    public Optional<List<PadronResponse>> listarPadronesPorCm(String cm) {
+        return buscarPadronPorCm(cm)
+                .map(padron -> padronRepository
+                        .findByContribuyenteOrderByNumeroPadronAsc(padron.getContribuyente())
+                        .stream()
+                        .map(PadronResponse::de)
+                        .toList());
+    }
+
+    private Optional<Padron> buscarPadronPorCm(String cm) {
         Optional<Padron> padron = padronRepository.findByCm(cm);
-
         if (padron.isEmpty()) {
             sincronizarDesdeGeoPagos();
             padron = padronRepository.findByCm(cm);
         }
+        return padron;
+    }
 
-        return padron.map(ContribuyenteResponse::de);
+    private static String normalizarFiltro(String filtro) {
+        return filtro == null || filtro.isBlank() ? null : filtro.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private static boolean coincide(String valor, String filtro) {
+        return filtro == null || valor != null && valor.toLowerCase(Locale.ROOT).contains(filtro);
     }
 
     @Transactional

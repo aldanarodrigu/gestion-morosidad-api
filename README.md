@@ -26,6 +26,12 @@ Como `contribuyentes-geopagos` no informa `DOCUMENTO`, este campo puede quedar v
 si el padrón no aparece en las otras consultas. Los contactos de origen manual
 se conservan al sincronizar.
 
+`GET /api/contribuyentes` acepta los parámetros opcionales `nombre` y `documento`.
+Cada filtro busca una coincidencia parcial sin distinguir mayúsculas; si se envían ambos,
+deben coincidir en el mismo contribuyente. Sin parámetros devuelve el listado completo.
+`GET /api/contribuyentes/{cm}/padrones` devuelve los padrones vinculados al contribuyente
+del CM indicado, o 404 si no existe ese CM. No agrupa personas distintas por nombre o documento.
+
 ## Levantar todo con Docker
 
 Requiere Docker Desktop y el repo del frontend clonado al lado de este:

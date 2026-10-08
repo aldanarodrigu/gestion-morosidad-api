@@ -5,6 +5,7 @@ import com.intendencia.gestion_morosidad_api.modules.contacto.dto.ContactoRespon
 import com.intendencia.gestion_morosidad_api.modules.contacto.service.ContactoService;
 import com.intendencia.gestion_morosidad_api.modules.contribuyente.dto.ContribuyenteResponse;
 import com.intendencia.gestion_morosidad_api.modules.contribuyente.service.ContribuyenteService;
+import com.intendencia.gestion_morosidad_api.modules.padron.dto.PadronResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -21,8 +22,10 @@ public class ContribuyenteController {
     private final ContactoService contactoService;
 
     @GetMapping
-    public List<ContribuyenteResponse> listarContribuyentes() {
-        return contribuyenteService.listarContribuyentes();
+    public List<ContribuyenteResponse> listarContribuyentes(
+            @RequestParam(required = false) String nombre,
+            @RequestParam(required = false) String documento) {
+        return contribuyenteService.listarContribuyentes(nombre, documento);
     }
 
     @GetMapping("/{cm}")
@@ -30,6 +33,13 @@ public class ContribuyenteController {
             @PathVariable String cm) {
 
         return contribuyenteService.buscarPorCm(cm)
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    @GetMapping("/{cm}/padrones")
+    public ResponseEntity<List<PadronResponse>> listarPadrones(@PathVariable String cm) {
+        return contribuyenteService.listarPadronesPorCm(cm)
                 .map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
