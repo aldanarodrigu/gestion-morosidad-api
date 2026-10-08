@@ -39,6 +39,7 @@ services:
       DB_PASSWORD: ${DB_PASSWORD}
       UTEC_API_USERNAME: ${UTEC_API_USERNAME:-}
       UTEC_API_PASSWORD: ${UTEC_API_PASSWORD:-}
+      JWT_SECRET: ${JWT_SECRET:?Definir JWT_SECRET en .env}
     ports:
       - "127.0.0.1:${API_HOST_PORT:-9080}:8080"
     read_only: true
