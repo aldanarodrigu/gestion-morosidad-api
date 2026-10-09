@@ -131,27 +131,41 @@ class SincronizacionDeudasProcessor {
             ctx.padronesNuevos.add(padron);
         }
 
-        Contribuyente contribuyente = padron.getContribuyente();
+        String documento = limitar(texto(fila.documento()), 50);
+        String documentoClave = documento == null ? null : documento.trim();
+
+        Contribuyente contribuyente = documentoClave == null
+                ? null
+                : ctx.contribuyentesPorDocumento.get(documentoClave);
+
         if (contribuyente == null) {
-            contribuyente = new Contribuyente();
-            ctx.contribuyentesNuevos.add(contribuyente);
-        }
-        String nombre = limitar(texto(fila.persona()), 255);
-        if (nombre != null) {
-            if (contribuyente.getNombre() != null && !contribuyente.getNombre().equals(nombre)) {
-                contribuyente.setDocumento(null);
-                ctx.contactosPendientes.add(new Dato(contribuyente, TipoContacto.TELEFONO,
-                        SincronizacionContactosService.PERSONAS, null, true));
-                ctx.contactosPendientes.add(new Dato(contribuyente, TipoContacto.EMAIL,
-                        SincronizacionContactosService.PERSONAS, null, true));
+            Contribuyente actual = padron.getContribuyente();
+
+            if (actual != null
+                    && (documentoClave == null
+                    || actual.getDocumento() == null
+                    || actual.getDocumento().isBlank()
+                    || actual.getDocumento().trim().equals(documentoClave))) {
+                contribuyente = actual;
+            } else {
+                contribuyente = new Contribuyente();
+                ctx.contribuyentesNuevos.add(contribuyente);
             }
+        }
+
+        String nombre = limitar(texto(fila.persona()), 255);
+
+        if (nombre != null) {
             contribuyente.setNombre(nombre);
         } else if (contribuyente.getNombre() == null) {
             contribuyente.setNombre(SIN_NOMBRE);
         }
-        String documento = limitar(texto(fila.documento()), 50);
+
         if (documento != null) {
             contribuyente.setDocumento(documento);
+            ctx.contribuyentesPorDocumento.putIfAbsent(
+                    documentoClave, contribuyente
+            );
         }
 
         ctx.contactosPendientes.add(new Dato(contribuyente, TipoContacto.TELEFONO,
@@ -324,6 +338,17 @@ class SincronizacionDeudasProcessor {
         final ReglasSegmentacion reglas = configuracionSegmentoService.reglasVigentes();
         final Map<String, Tributo> tributosPorCodigo = porClave(tributoRepository.findAll(), Tributo::getCodigo);
         final Map<String, Padron> padronesPorCm = porClave(padronRepository.findAll(), Padron::getCm);
+
+        final Map<String, Contribuyente> contribuyentesPorDocumento =
+                contribuyenteRepository.findAll().stream()
+                        .filter(c -> c.getDocumento() != null
+                                && !c.getDocumento().isBlank())
+                        .collect(Collectors.toMap(
+                                c -> c.getDocumento().trim(),
+                                Function.identity(),
+                                (a, b) -> a
+                        ));
+
         final Map<String, Deuda> deudasPorCm =
                 porClave(deudaRepository.findAllConPadron(), deuda -> deuda.getPadron().getCm());
         final Set<String> cmsProcesados = new HashSet<>();
