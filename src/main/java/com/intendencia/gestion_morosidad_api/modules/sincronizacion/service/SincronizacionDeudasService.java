@@ -2,6 +2,7 @@ package com.intendencia.gestion_morosidad_api.modules.sincronizacion.service;
 
 import com.intendencia.gestion_morosidad_api.integration.intendencia.common.IntendenciaApiResponse;
 import com.intendencia.gestion_morosidad_api.integration.intendencia.geopagos.client.GeoPagosClient;
+import com.intendencia.gestion_morosidad_api.integration.intendencia.geopagos.dto.GeoPagosContribuyenteDto;
 import com.intendencia.gestion_morosidad_api.integration.intendencia.geopagos.dto.GeoPagosFacturaCanceladaDto;
 import com.intendencia.gestion_morosidad_api.integration.intendencia.geopagos.dto.GeoPagosFacturaPendienteDto;
 import com.intendencia.gestion_morosidad_api.modules.deuda.repository.DeudaRepository;
@@ -68,7 +69,16 @@ public class SincronizacionDeudasService {
             List<GeoPagosFacturaCanceladaDto> canceladas = consultar("facturas canceladas",
                     () -> geoPagosClient.obtenerFacturasCanceladas(desde, hoy.plusDays(1)));
 
-            return processor.procesar(pendientes, canceladas, hoy, inicio);
+            // Contactos de Personas y del último GeoPago. Opcional: si falla se guardan las deudas
+            // igual y los contactos se actualizan en la próxima sincronización (null = no disponible).
+            List<GeoPagosContribuyenteDto> contribuyentes;
+            try {
+                contribuyentes = consultar("contribuyentes", geoPagosClient::obtenerContribuyentes);
+            } catch (IntegracionExternaException ex) {
+                contribuyentes = null;
+            }
+
+            return processor.procesar(pendientes, canceladas, contribuyentes, hoy, inicio);
         } finally {
             enCurso.set(false);
         }

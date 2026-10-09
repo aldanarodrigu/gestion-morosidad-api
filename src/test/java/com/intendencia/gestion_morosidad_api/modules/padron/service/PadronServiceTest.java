@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 
 import com.intendencia.gestion_morosidad_api.modules.contribuyente.entity.Contribuyente;
-import com.intendencia.gestion_morosidad_api.modules.contribuyente.service.ContribuyenteService;
 import com.intendencia.gestion_morosidad_api.modules.padron.dto.PadronResponse;
 import com.intendencia.gestion_morosidad_api.modules.padron.entity.Padron;
 import com.intendencia.gestion_morosidad_api.modules.padron.repository.PadronRepository;
@@ -19,7 +18,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class PadronServiceTest {
 
     @Mock private PadronRepository padronRepository;
-    @Mock private ContribuyenteService contribuyenteService;
     @InjectMocks private PadronService service;
 
     @Test

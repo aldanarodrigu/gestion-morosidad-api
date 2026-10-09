@@ -1,7 +1,6 @@
 package com.intendencia.gestion_morosidad_api.modules.padron.service;
 
 import com.intendencia.gestion_morosidad_api.modules.contribuyente.dto.ContribuyenteResponse;
-import com.intendencia.gestion_morosidad_api.modules.contribuyente.service.ContribuyenteService;
 import com.intendencia.gestion_morosidad_api.modules.padron.dto.PadronResponse;
 import com.intendencia.gestion_morosidad_api.modules.padron.entity.Padron;
 import com.intendencia.gestion_morosidad_api.modules.padron.repository.PadronRepository;
@@ -16,7 +15,6 @@ import java.util.List;
 public class PadronService {
 
     private final PadronRepository padronRepository;
-    private final ContribuyenteService contribuyenteService;
 
     /**
      * El número de padrón se repite entre localidades, así que devuelve todos los padrones con ese
@@ -37,11 +35,8 @@ public class PadronService {
     }
 
     private List<Padron> buscarPadrones(String numeroPadron, String localidad) {
+        // Solo lee la base: los padrones se cargan en la sincronización, no durante una consulta
         List<Padron> padrones = padronRepository.findByNumeroPadronOrderByLocalidadAscCmAsc(numeroPadron);
-        if (padrones.isEmpty()) {
-            contribuyenteService.sincronizarDesdeGeoPagos();
-            padrones = padronRepository.findByNumeroPadronOrderByLocalidadAscCmAsc(numeroPadron);
-        }
         if (localidad == null || localidad.isBlank()) {
             return padrones;
         }

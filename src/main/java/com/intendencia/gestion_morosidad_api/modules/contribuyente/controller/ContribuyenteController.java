@@ -6,8 +6,12 @@ import com.intendencia.gestion_morosidad_api.modules.contacto.service.ContactoSe
 import com.intendencia.gestion_morosidad_api.modules.contribuyente.dto.ContribuyenteResponse;
 import com.intendencia.gestion_morosidad_api.modules.contribuyente.service.ContribuyenteService;
 import com.intendencia.gestion_morosidad_api.modules.padron.dto.PadronResponse;
+import com.intendencia.gestion_morosidad_api.shared.dto.PaginaResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -21,11 +25,13 @@ public class ContribuyenteController {
     private final ContribuyenteService contribuyenteService;
     private final ContactoService contactoService;
 
+    /** Paginado: ?page=0&size=20&sort=contribuyente.nombre,asc (por defecto ordena por nombre). */
     @GetMapping
-    public List<ContribuyenteResponse> listarContribuyentes(
+    public PaginaResponse<ContribuyenteResponse> listarContribuyentes(
             @RequestParam(required = false) String nombre,
-            @RequestParam(required = false) String documento) {
-        return contribuyenteService.listarContribuyentes(nombre, documento);
+            @RequestParam(required = false) String documento,
+            @PageableDefault(size = 20, sort = "contribuyente.nombre", direction = Sort.Direction.ASC) Pageable pageable) {
+        return contribuyenteService.listarContribuyentes(nombre, documento, pageable);
     }
 
     @GetMapping("/{cm}")

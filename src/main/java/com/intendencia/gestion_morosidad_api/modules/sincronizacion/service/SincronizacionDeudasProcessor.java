@@ -1,5 +1,6 @@
 package com.intendencia.gestion_morosidad_api.modules.sincronizacion.service;
 
+import com.intendencia.gestion_morosidad_api.integration.intendencia.geopagos.dto.GeoPagosContribuyenteDto;
 import com.intendencia.gestion_morosidad_api.integration.intendencia.geopagos.dto.GeoPagosFacturaCanceladaDto;
 import com.intendencia.gestion_morosidad_api.integration.intendencia.geopagos.dto.GeoPagosFacturaPendienteDto;
 import com.intendencia.gestion_morosidad_api.modules.contacto.TipoContacto;
@@ -59,6 +60,7 @@ class SincronizacionDeudasProcessor {
     public ResultadoSincronizacion procesar(
             List<GeoPagosFacturaPendienteDto> pendientes,
             List<GeoPagosFacturaCanceladaDto> canceladas,
+            List<GeoPagosContribuyenteDto> contribuyentes,
             LocalDate hoy,
             LocalDateTime inicio) {
 
@@ -75,6 +77,7 @@ class SincronizacionDeudasProcessor {
         }
         cancelarDeudasQueYaNoEstanPendientes(ctx);
         registrarCobros(canceladas, ctx);
+        aplicarContactosDeContribuyentes(contribuyentes, ctx);
 
         // Guardar lo nuevo respetando las dependencias (lo existente se actualiza solo al terminar la transacción)
         tributoRepository.saveAll(ctx.tributosNuevos);
@@ -167,6 +170,7 @@ class SincronizacionDeudasProcessor {
         padron.setBlock(limitar(texto(fila.block()), 100));
         padron.setUnidad(limitar(texto(fila.unidad()), 100));
         padron.setContribuyente(contribuyente);
+        ctx.cmsImportados.add(cm);
 
         Deuda deuda = ctx.deudasPorCm.get(cm);
         if (deuda == null) {
@@ -204,6 +208,46 @@ class SincronizacionDeudasProcessor {
                 ctx.tributosNuevos.add(tributo);
                 return tributo;
             }));
+        }
+    }
+
+    /**
+     * Contactos de contribuyentes-geopagos: teléfono y correo de Personas (del contribuyente) y de la
+     * última transacción GeoPagos (puede ser de quien pagó, no del titular). Solo para los padrones
+     * con deuda importados en esta corrida; el nombre y el documento vienen de facturas/pendientes,
+     * que los trae juntos, y de acá solo se toma el nombre si faltaba.
+     */
+    private void aplicarContactosDeContribuyentes(List<GeoPagosContribuyenteDto> contribuyentes, Contexto ctx) {
+        if (contribuyentes == null) {
+            ctx.advertir("No se pudo consultar contribuyentes-geopagos: los contactos de Personas y GeoPagos "
+                    + "se actualizarán en la próxima sincronización");
+            return;
+        }
+        Map<String, GeoPagosContribuyenteDto> porCm = new HashMap<>();
+        for (GeoPagosContribuyenteDto dto : contribuyentes) {
+            String cm = texto(dto.cm());
+            if (cm != null) {
+                porCm.put(cm, dto);
+            }
+        }
+        for (String cm : ctx.cmsImportados) {
+            GeoPagosContribuyenteDto dto = porCm.get(cm);
+            if (dto == null) {
+                continue;
+            }
+            Contribuyente contribuyente = ctx.padronesPorCm.get(cm).getContribuyente();
+            String nombrePersonas = limitar(texto(dto.nombrePersonas()), 255);
+            if (SIN_NOMBRE.equals(contribuyente.getNombre()) && nombrePersonas != null) {
+                contribuyente.setNombre(nombrePersonas);
+            }
+            ctx.contactosPendientes.add(new Dato(contribuyente, TipoContacto.TELEFONO,
+                    SincronizacionContactosService.PERSONAS, texto(dto.telefonoPersonas()), true));
+            ctx.contactosPendientes.add(new Dato(contribuyente, TipoContacto.EMAIL,
+                    SincronizacionContactosService.PERSONAS, texto(dto.emailPersonas()), true));
+            ctx.contactosPendientes.add(new Dato(contribuyente, TipoContacto.TELEFONO,
+                    SincronizacionContactosService.GEOPAGOS, texto(dto.telefonoGeoPagos()), false));
+            ctx.contactosPendientes.add(new Dato(contribuyente, TipoContacto.EMAIL,
+                    SincronizacionContactosService.GEOPAGOS, texto(dto.emailGeoPagos()), false));
         }
     }
 
@@ -283,6 +327,8 @@ class SincronizacionDeudasProcessor {
         final Map<String, Deuda> deudasPorCm =
                 porClave(deudaRepository.findAllConPadron(), deuda -> deuda.getPadron().getCm());
         final Set<String> cmsProcesados = new HashSet<>();
+        /** CM con deuda positiva que quedaron guardados en esta corrida. */
+        final Set<String> cmsImportados = new HashSet<>();
         final List<Tributo> tributosNuevos = new ArrayList<>();
         final List<Contribuyente> contribuyentesNuevos = new ArrayList<>();
         final List<Dato> contactosPendientes = new ArrayList<>();
@@ -296,6 +342,13 @@ class SincronizacionDeudasProcessor {
         Contexto(LocalDate hoy, LocalDateTime ahora) {
             this.hoy = hoy;
             this.ahora = ahora;
+        }
+
+        /** Aviso que no implica omitir un registro. */
+        void advertir(String mensaje) {
+            if (advertencias.size() < MAX_ADVERTENCIAS) {
+                advertencias.add(mensaje);
+            }
         }
 
         void omitir(String motivo) {
