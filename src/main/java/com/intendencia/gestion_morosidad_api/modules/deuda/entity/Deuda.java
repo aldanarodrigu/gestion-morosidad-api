@@ -15,6 +15,7 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.JoinTable;
 import jakarta.persistence.ManyToMany;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.SequenceGenerator;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -40,7 +41,9 @@ import org.hibernate.annotations.UpdateTimestamp;
 public class Deuda {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    // Reserva IDs de a 1000 (la secuencia avanza de a 1000): permite enviar los INSERT en lotes
+    @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "deuda_seq")
+    @SequenceGenerator(name = "deuda_seq", sequenceName = "deuda_id_seq", allocationSize = 1000)
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)

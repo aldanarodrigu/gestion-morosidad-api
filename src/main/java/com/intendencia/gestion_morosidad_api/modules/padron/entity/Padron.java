@@ -14,13 +14,16 @@ import lombok.Setter;
 public class Padron {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    // Reserva IDs de a 1000 (la secuencia avanza de a 1000): permite enviar los INSERT en lotes
+    @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "padrones_seq")
+    @SequenceGenerator(name = "padrones_seq", sequenceName = "padrones_id_seq", allocationSize = 1000)
     private Long id;
 
     @Column(nullable = false, unique = true)
     private String cm;
 
-    @Column(name = "numero_padron", nullable = false, unique = true)
+    /** No es único: cada localidad numera sus padrones por separado. El identificador es el CM. */
+    @Column(name = "numero_padron", nullable = false)
     private String numeroPadron;
 
     @Column(name = "tipo_padron")

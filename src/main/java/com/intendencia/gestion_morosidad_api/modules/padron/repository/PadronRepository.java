@@ -16,8 +16,9 @@ public interface PadronRepository extends JpaRepository<Padron, Long> {
     @EntityGraph(attributePaths = "contribuyente")
     Optional<Padron> findByCm(String cm);
 
+    /** El número de padrón se repite entre localidades: puede devolver varios padrones. */
     @EntityGraph(attributePaths = "contribuyente")
-    Optional<Padron> findByNumeroPadron(String numeroPadron);
+    List<Padron> findByNumeroPadronOrderByLocalidadAscCmAsc(String numeroPadron);
 
     @EntityGraph(attributePaths = "contribuyente")
     List<Padron> findByContribuyenteOrderByNumeroPadronAsc(Contribuyente contribuyente);

@@ -120,22 +120,12 @@ class SincronizacionDeudasProcessor {
             ctx.omitir("CM " + cm + ": sin deuda vencida positiva");
             return;
         }
-        String cmConEseNumero = ctx.cmPorNumeroPadron.get(numeroPadron);
-        if (cmConEseNumero != null && !cmConEseNumero.equals(cm)) {
-            // padrones.numero_padron es único: dos CM con el mismo número no se pueden guardar
-            ctx.omitir("CM " + cm + ": el número de padrón " + numeroPadron
-                    + " ya está asociado al CM " + cmConEseNumero);
-            return;
-        }
-
         Padron padron = ctx.padronesPorCm.get(cm);
         if (padron == null) {
             padron = new Padron();
             padron.setCm(cm);
             ctx.padronesPorCm.put(cm, padron);
             ctx.padronesNuevos.add(padron);
-        } else if (padron.getNumeroPadron() != null) {
-            ctx.cmPorNumeroPadron.remove(padron.getNumeroPadron());
         }
 
         Contribuyente contribuyente = padron.getContribuyente();
@@ -177,7 +167,6 @@ class SincronizacionDeudasProcessor {
         padron.setBlock(limitar(texto(fila.block()), 100));
         padron.setUnidad(limitar(texto(fila.unidad()), 100));
         padron.setContribuyente(contribuyente);
-        ctx.cmPorNumeroPadron.put(numeroPadron, cm);
 
         Deuda deuda = ctx.deudasPorCm.get(cm);
         if (deuda == null) {
@@ -291,7 +280,6 @@ class SincronizacionDeudasProcessor {
         final ReglasSegmentacion reglas = configuracionSegmentoService.reglasVigentes();
         final Map<String, Tributo> tributosPorCodigo = porClave(tributoRepository.findAll(), Tributo::getCodigo);
         final Map<String, Padron> padronesPorCm = porClave(padronRepository.findAll(), Padron::getCm);
-        final Map<String, String> cmPorNumeroPadron = new HashMap<>();
         final Map<String, Deuda> deudasPorCm =
                 porClave(deudaRepository.findAllConPadron(), deuda -> deuda.getPadron().getCm());
         final Set<String> cmsProcesados = new HashSet<>();
@@ -308,7 +296,6 @@ class SincronizacionDeudasProcessor {
         Contexto(LocalDate hoy, LocalDateTime ahora) {
             this.hoy = hoy;
             this.ahora = ahora;
-            padronesPorCm.values().forEach(padron -> cmPorNumeroPadron.put(padron.getNumeroPadron(), padron.getCm()));
         }
 
         void omitir(String motivo) {

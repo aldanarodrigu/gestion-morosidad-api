@@ -9,7 +9,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.Optional;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -18,33 +18,37 @@ public class PadronService {
     private final PadronRepository padronRepository;
     private final ContribuyenteService contribuyenteService;
 
+    /**
+     * El número de padrón se repite entre localidades, así que devuelve todos los padrones con ese
+     * número. Con {@code localidad} se queda solo con los de esa localidad (sin distinguir mayúsculas).
+     */
     @Transactional
-    public Optional<PadronResponse> buscarPorNumeroPadron(String numeroPadron) {
-
-        Optional<Padron> padron =
-                padronRepository.findByNumeroPadron(numeroPadron);
-
-        if (padron.isEmpty()) {
-            contribuyenteService.sincronizarDesdeGeoPagos();
-            padron = padronRepository.findByNumeroPadron(numeroPadron);
-        }
-
-        return padron.map(PadronResponse::de);
+    public List<PadronResponse> buscarPorNumeroPadron(String numeroPadron, String localidad) {
+        return buscarPadrones(numeroPadron, localidad).stream()
+                .map(PadronResponse::de)
+                .toList();
     }
 
     @Transactional
-    public Optional<ContribuyenteResponse> buscarContribuyente(
-            String numeroPadron) {
+    public List<ContribuyenteResponse> buscarContribuyentes(String numeroPadron, String localidad) {
+        return buscarPadrones(numeroPadron, localidad).stream()
+                .map(ContribuyenteResponse::de)
+                .toList();
+    }
 
-        Optional<Padron> padron =
-                padronRepository.findByNumeroPadron(numeroPadron);
-
-        if (padron.isEmpty()) {
+    private List<Padron> buscarPadrones(String numeroPadron, String localidad) {
+        List<Padron> padrones = padronRepository.findByNumeroPadronOrderByLocalidadAscCmAsc(numeroPadron);
+        if (padrones.isEmpty()) {
             contribuyenteService.sincronizarDesdeGeoPagos();
-            padron = padronRepository.findByNumeroPadron(numeroPadron);
+            padrones = padronRepository.findByNumeroPadronOrderByLocalidadAscCmAsc(numeroPadron);
         }
-
-        return padron.map(ContribuyenteResponse::de);
+        if (localidad == null || localidad.isBlank()) {
+            return padrones;
+        }
+        String buscada = localidad.trim();
+        return padrones.stream()
+                .filter(padron -> padron.getLocalidad() != null && padron.getLocalidad().trim().equalsIgnoreCase(buscada))
+                .toList();
     }
 
 }

@@ -23,6 +23,8 @@ public class SincronizacionContactosService {
     public static final String GEOPAGOS = "API_GEOPAGOS";
     public static final String PENDIENTES = "API_FACTURAS_PENDIENTES";
 
+    private static final int MAX_PARAMETROS_IN = 5_000;
+
     private final ContactoRepository contactoRepository;
 
     public record Dato(Contribuyente contribuyente, TipoContacto tipo, String origen,
@@ -42,7 +44,7 @@ public class SincronizacionContactosService {
         List<Contribuyente> contribuyentes = datos.stream().map(Dato::contribuyente).distinct().toList();
         Map<Clave, Contacto> existentes = new HashMap<>();
         List<Contacto> borrar = new ArrayList<>();
-        for (Contacto contacto : contactoRepository.findByContribuyenteIn(contribuyentes)) {
+        for (Contacto contacto : buscarContactos(contribuyentes)) {
             Clave clave = new Clave(contacto.getContribuyente().getId(),
                     contacto.getTipoContacto(), contacto.getOrigen());
             if (ultimos.containsKey(clave) && existentes.putIfAbsent(clave, contacto) != null) {
@@ -81,6 +83,19 @@ public class SincronizacionContactosService {
         }
         contactoRepository.deleteAll(borrar);
         contactoRepository.saveAll(guardar);
+    }
+
+    /**
+     * Postgres admite como máximo 32.767 parámetros por consulta: con miles de contribuyentes
+     * (contribuyentes-geopagos trae más de 70.000) un único IN falla, así que se consulta por partes.
+     */
+    private List<Contacto> buscarContactos(List<Contribuyente> contribuyentes) {
+        List<Contacto> contactos = new ArrayList<>();
+        for (int desde = 0; desde < contribuyentes.size(); desde += MAX_PARAMETROS_IN) {
+            int hasta = Math.min(desde + MAX_PARAMETROS_IN, contribuyentes.size());
+            contactos.addAll(contactoRepository.findByContribuyenteIn(contribuyentes.subList(desde, hasta)));
+        }
+        return contactos;
     }
 
     private record Clave(Long contribuyenteId, TipoContacto tipo, String origen) {

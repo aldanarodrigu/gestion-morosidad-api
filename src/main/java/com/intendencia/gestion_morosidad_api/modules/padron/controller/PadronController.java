@@ -7,6 +7,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/api/padrones")
 @RequiredArgsConstructor
@@ -14,21 +16,22 @@ public class PadronController {
 
     private final PadronService padronService;
 
+    /** El número de padrón se repite entre localidades: devuelve todos (filtrables por ?localidad=). */
     @GetMapping("/{numeroPadron}")
-    public ResponseEntity<PadronResponse> buscarPorNumeroPadron(
-            @PathVariable String numeroPadron) {
+    public ResponseEntity<List<PadronResponse>> buscarPorNumeroPadron(
+            @PathVariable String numeroPadron,
+            @RequestParam(required = false) String localidad) {
 
-        return padronService.buscarPorNumeroPadron(numeroPadron)
-                .map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.notFound().build());
+        List<PadronResponse> padrones = padronService.buscarPorNumeroPadron(numeroPadron, localidad);
+        return padrones.isEmpty() ? ResponseEntity.notFound().build() : ResponseEntity.ok(padrones);
     }
 
     @GetMapping("/{numeroPadron}/contribuyente")
-    public ResponseEntity<ContribuyenteResponse> buscarContribuyente(
-            @PathVariable String numeroPadron) {
+    public ResponseEntity<List<ContribuyenteResponse>> buscarContribuyentes(
+            @PathVariable String numeroPadron,
+            @RequestParam(required = false) String localidad) {
 
-        return padronService.buscarContribuyente(numeroPadron)
-                .map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.notFound().build());
+        List<ContribuyenteResponse> contribuyentes = padronService.buscarContribuyentes(numeroPadron, localidad);
+        return contribuyentes.isEmpty() ? ResponseEntity.notFound().build() : ResponseEntity.ok(contribuyentes);
     }
 }

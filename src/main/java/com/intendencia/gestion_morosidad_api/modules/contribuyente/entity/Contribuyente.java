@@ -17,7 +17,9 @@ import java.util.List;
 public class Contribuyente {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    // Reserva IDs de a 1000 (la secuencia avanza de a 1000): permite enviar los INSERT en lotes
+    @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "contribuyentes_seq")
+    @SequenceGenerator(name = "contribuyentes_seq", sequenceName = "contribuyentes_id_seq", allocationSize = 1000)
     private Long id;
 
     @Column(nullable = false)

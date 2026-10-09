@@ -5,6 +5,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.SequenceGenerator;
 import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -22,7 +23,9 @@ import lombok.Setter;
 public class Tributo {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    // Reserva IDs de a 1000 (la secuencia avanza de a 1000): permite enviar los INSERT en lotes
+    @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "tributos_seq")
+    @SequenceGenerator(name = "tributos_seq", sequenceName = "tributos_id_seq", allocationSize = 1000)
     private Long id;
 
     @Column(nullable = false, unique = true, length = 20)
