@@ -5,6 +5,8 @@ import com.intendencia.gestion_morosidad_api.modules.deuda.entity.Deuda;
 import com.intendencia.gestion_morosidad_api.modules.deuda.entity.EstadoDeuda;
 import com.intendencia.gestion_morosidad_api.modules.contribuyente.entity.Contribuyente;
 import com.intendencia.gestion_morosidad_api.modules.padron.entity.Padron;
+import com.intendencia.gestion_morosidad_api.modules.tributo.entity.Tributo;
+import jakarta.persistence.criteria.Join;
 import jakarta.persistence.criteria.Path;
 import jakarta.persistence.criteria.Predicate;
 import java.math.BigDecimal;
@@ -38,18 +40,43 @@ public final class DeudaSpecifications {
             if (tieneTexto(filtro.padron())) {
                 predicados.add(cb.equal(padron.get("numeroPadron"), filtro.padron().trim()));
             }
+
             if (tieneTexto(filtro.contribuyente())) {
                 String texto = filtro.contribuyente().trim();
                 Path<Contribuyente> contribuyente = padron.get("contribuyente");
+
                 predicados.add(cb.or(
-                        cb.like(cb.lower(contribuyente.get("nombre")), contiene(texto), ESCAPE),
-                        cb.equal(contribuyente.get("documento"), texto)));
+                        cb.like(
+                                cb.lower(contribuyente.get("nombre")),
+                                contiene(texto),
+                                ESCAPE
+                        ),
+                        cb.like(
+                                contribuyente.get("documento"),
+                                contiene(texto),
+                                ESCAPE
+                        ),
+                        cb.like(
+                                cb.lower(padron.get("cm")),
+                                contiene(texto),
+                                ESCAPE
+                        )
+                ));
             }
+
             if (filtro.segmentoId() != null) {
                 predicados.add(cb.equal(root.get("segmentoMora").get("id"), filtro.segmentoId()));
             }
             if (tieneTexto(filtro.localidad())) {
                 predicados.add(cb.like(cb.lower(padron.get("localidad")), contiene(filtro.localidad()), ESCAPE));
+            }
+
+            if (filtro.tributo() != null && !filtro.tributo().isBlank()) {
+                Join<Deuda, Tributo> tributoJoin = root.join("tributos");
+                predicados.add(
+                        cb.equal(tributoJoin.get("codigo"), filtro.tributo())
+                );
+                query.distinct(true);
             }
 
             return cb.and(predicados.toArray(Predicate[]::new));

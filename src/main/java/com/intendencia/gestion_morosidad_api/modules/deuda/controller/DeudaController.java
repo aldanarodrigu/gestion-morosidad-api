@@ -41,8 +41,9 @@ public class DeudaController {
             @RequestParam(required = false) String contribuyente,
             @RequestParam(required = false) String localidad,
             @RequestParam(required = false) Long segmento,
+            @RequestParam(required = false) String tributo,
             @PageableDefault(size = 20, sort = "deudaDesde", direction = Sort.Direction.ASC) Pageable pageable) {
-        return deudaService.listar(new DeudaFiltro(estado, padron, contribuyente, localidad, segmento), pageable);
+        return deudaService.listar(new DeudaFiltro(estado, padron, contribuyente, localidad, segmento, tributo), pageable);
     }
 
     @GetMapping("/deudas/{id}")
