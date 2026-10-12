@@ -12,7 +12,8 @@ import java.time.LocalDateTime;
 import java.util.List;
 import lombok.Builder;
 
-@Builder
+@Builder(toBuilder = true)
+
 public record DeudaResponse(
         Long id,
         PadronResponse padron,
@@ -29,5 +30,6 @@ public record DeudaResponse(
         BigDecimal importeUltimoCobro,
         EstadoDeuda estado,
         LocalDateTime fechaSincronizacion,
-        List<AccionResponse> accionesSugeridas) {
+        List<AccionResponse> accionesSugeridas,
+        Long cantidadGestiones) {
 }

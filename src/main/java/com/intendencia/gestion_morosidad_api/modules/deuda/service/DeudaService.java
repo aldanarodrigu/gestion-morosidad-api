@@ -9,6 +9,7 @@ import com.intendencia.gestion_morosidad_api.modules.deuda.entity.EstadoDeuda;
 import com.intendencia.gestion_morosidad_api.modules.deuda.mapper.DeudaMapper;
 import com.intendencia.gestion_morosidad_api.modules.deuda.repository.DeudaRepository;
 import com.intendencia.gestion_morosidad_api.modules.deuda.repository.DeudaSpecifications;
+import com.intendencia.gestion_morosidad_api.modules.gestion.GestionRepository;
 import com.intendencia.gestion_morosidad_api.modules.segmento.service.ConfiguracionSegmentoCambiadaEvent;
 import com.intendencia.gestion_morosidad_api.modules.segmento.service.ConfiguracionSegmentoService;
 import com.intendencia.gestion_morosidad_api.modules.segmento.service.ReglasSegmentacion;
@@ -38,6 +39,7 @@ public class DeudaService {
     private final ConfiguracionSegmentoService configuracionSegmentoService;
     private final Clock clock;
     private final AccionSegmentoRepository accionSegmentoRepository;
+    private final GestionRepository gestionRepository;
 
     public PaginaResponse<DeudaResponse> listar(
             DeudaFiltro filtro,
@@ -60,6 +62,12 @@ public class DeudaService {
         Map<Long, List<AccionResponse>> accionesPorSegmento =
                 obtenerAccionesPorSegmento(segmentoIds);
 
+        Map<Long, Long> gestionesPorDeuda = contarGestiones(
+                pagina.getContent().stream()
+                        .map(Deuda::getId)
+                        .toList()
+        );
+
         return PaginaResponse.de(pagina.map(deuda -> {
             Long segmentoId = deuda.getSegmentoMora() == null
                     ? null
@@ -72,7 +80,12 @@ public class DeudaService {
                     List.of()
             );
 
-            return DeudaMapper.toResponse(deuda, hoy, acciones);
+            return DeudaMapper.toResponse(deuda, hoy, acciones)
+                    .toBuilder()
+                    .cantidadGestiones(
+                            gestionesPorDeuda.getOrDefault(deuda.getId(), 0L)
+                    )
+                    .build();
         }));
     }
 
@@ -227,5 +240,18 @@ public class DeudaService {
                                 "No existe la deuda con id " + id
                         )
                 );
+    }
+
+    private Map<Long, Long> contarGestiones(List<Long> deudaIds) {
+        if (deudaIds.isEmpty()) {
+            return Map.of();
+        }
+
+        return gestionRepository.contarPorDeudaIds(deudaIds)
+                .stream()
+                .collect(Collectors.toMap(
+                        fila -> (Long) fila[0],
+                        fila -> (Long) fila[1]
+                ));
     }
 }
