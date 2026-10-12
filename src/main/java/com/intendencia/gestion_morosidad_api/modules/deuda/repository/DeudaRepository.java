@@ -43,4 +43,15 @@ public interface DeudaRepository extends JpaRepository<Deuda, Long>, JpaSpecific
     @EntityGraph(attributePaths = "padron")
     @Query("select d from Deuda d")
     List<Deuda> findAllConPadron();
+
+    @EntityGraph(attributePaths = {
+            "padron",
+            "padron.contribuyente",
+            "segmentoMora"
+    })
+    List<Deuda> findByPadronCmOrderByDeudaDesdeAsc(String cm);
+
+    List<Deuda> findByPadron_Contribuyente_IdOrderByDeudaDesdeAsc(
+            Long contribuyenteId
+    );
 }

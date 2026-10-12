@@ -198,6 +198,97 @@ public class DeudaService {
         );
     }
 
+    public List<DeudaResponse> listarPorCm(String cm) {
+        LocalDate hoy = LocalDate.now(clock);
+
+        List<Deuda> deudas =
+                deudaRepository.findByPadronCmOrderByDeudaDesdeAsc(cm.trim());
+
+        List<Long> segmentoIds = deudas.stream()
+                .map(Deuda::getSegmentoMora)
+                .filter(segmento -> segmento != null)
+                .map(segmento -> segmento.getId())
+                .distinct()
+                .toList();
+
+        Map<Long, List<AccionResponse>> accionesPorSegmento =
+                obtenerAccionesPorSegmento(segmentoIds);
+
+        Map<Long, Long> gestionesPorDeuda = contarGestiones(
+                deudas.stream().map(Deuda::getId).toList()
+        );
+
+        return deudas.stream()
+                .map(deuda -> {
+                    Long segmentoId = deuda.getSegmentoMora() == null
+                            ? null
+                            : deuda.getSegmentoMora().getId();
+
+                    List<AccionResponse> acciones = segmentoId == null
+                            ? List.of()
+                            : accionesPorSegmento.getOrDefault(
+                            segmentoId,
+                            List.of()
+                    );
+
+                    return DeudaMapper.toResponse(deuda, hoy, acciones)
+                            .toBuilder()
+                            .cantidadGestiones(
+                                    gestionesPorDeuda.getOrDefault(
+                                            deuda.getId(), 0L
+                                    )
+                            )
+                            .build();
+                })
+                .toList();
+    }
+
+    public List<DeudaResponse> listarPorContribuyenteId(Long contribuyenteId) {
+        LocalDate hoy = LocalDate.now(clock);
+
+        List<Deuda> deudas = deudaRepository
+                .findByPadron_Contribuyente_IdOrderByDeudaDesdeAsc(
+                        contribuyenteId
+                );
+
+        List<Long> segmentoIds = deudas.stream()
+                .map(Deuda::getSegmentoMora)
+                .filter(segmento -> segmento != null)
+                .map(segmento -> segmento.getId())
+                .distinct()
+                .toList();
+
+        Map<Long, List<AccionResponse>> accionesPorSegmento =
+                obtenerAccionesPorSegmento(segmentoIds);
+
+        Map<Long, Long> gestionesPorDeuda = contarGestiones(
+                deudas.stream().map(Deuda::getId).toList()
+        );
+
+        return deudas.stream()
+                .map(deuda -> {
+                    Long segmentoId = deuda.getSegmentoMora() == null
+                            ? null
+                            : deuda.getSegmentoMora().getId();
+
+                    List<AccionResponse> acciones = segmentoId == null
+                            ? List.of()
+                            : accionesPorSegmento.getOrDefault(
+                            segmentoId, List.of()
+                    );
+
+                    return DeudaMapper.toResponse(deuda, hoy, acciones)
+                            .toBuilder()
+                            .cantidadGestiones(
+                                    gestionesPorDeuda.getOrDefault(
+                                            deuda.getId(), 0L
+                                    )
+                            )
+                            .build();
+                })
+                .toList();
+    }
+
     private List<AccionResponse> obtenerAccionesDeuda(Deuda deuda) {
         if (deuda.getSegmentoMora() == null) {
             return List.of();

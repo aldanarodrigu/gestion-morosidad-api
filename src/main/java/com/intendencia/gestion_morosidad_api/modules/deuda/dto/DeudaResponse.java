@@ -31,5 +31,6 @@ public record DeudaResponse(
         EstadoDeuda estado,
         LocalDateTime fechaSincronizacion,
         List<AccionResponse> accionesSugeridas,
-        Long cantidadGestiones) {
+        Long cantidadGestiones,
+        Long contribuyenteId) {
 }

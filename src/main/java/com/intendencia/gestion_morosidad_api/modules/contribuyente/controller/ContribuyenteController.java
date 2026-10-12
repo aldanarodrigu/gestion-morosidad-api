@@ -5,6 +5,8 @@ import com.intendencia.gestion_morosidad_api.modules.contacto.dto.ContactoRespon
 import com.intendencia.gestion_morosidad_api.modules.contacto.service.ContactoService;
 import com.intendencia.gestion_morosidad_api.modules.contribuyente.dto.ContribuyenteResponse;
 import com.intendencia.gestion_morosidad_api.modules.contribuyente.service.ContribuyenteService;
+import com.intendencia.gestion_morosidad_api.modules.deuda.service.DeudaService;
+import com.intendencia.gestion_morosidad_api.modules.deuda.dto.DeudaResponse;
 import com.intendencia.gestion_morosidad_api.modules.padron.dto.PadronResponse;
 import com.intendencia.gestion_morosidad_api.shared.dto.PaginaResponse;
 import jakarta.validation.Valid;
@@ -24,6 +26,7 @@ public class ContribuyenteController {
 
     private final ContribuyenteService contribuyenteService;
     private final ContactoService contactoService;
+    private final DeudaService deudaService;
 
     /** Paginado: ?page=0&size=20&sort=contribuyente.nombre,asc (por defecto ordena por nombre). */
     @GetMapping
@@ -63,5 +66,12 @@ public class ContribuyenteController {
             @Valid @RequestBody ContactoRequest request
     ) {
         return contactoService.guardarOActualizar(cm, request);
+    }
+
+    @GetMapping("/id/{contribuyenteId}/deudas")
+    public List<DeudaResponse> listarDeudasPorContribuyenteId(
+            @PathVariable Long contribuyenteId
+    ) {
+        return deudaService.listarPorContribuyenteId(contribuyenteId);
     }
 }

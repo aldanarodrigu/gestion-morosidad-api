@@ -69,4 +69,12 @@ public class DeudaController {
     public DeudaResponse actualizarEstado(@PathVariable Long id, @Valid @RequestBody ActualizarEstadoRequest request) {
         return deudaService.actualizarEstado(id, request.estado());
     }
+
+    @GetMapping("/contribuyentes/{cm}/deudas")
+    @PreAuthorize("hasAnyRole('ADMINISTRADOR', 'NOTIFICADOR', 'ANALISTA')")
+    public List<DeudaResponse> listarPorContribuyente(
+            @PathVariable String cm
+    ) {
+        return deudaService.listarPorCm(cm);
+    }
 }

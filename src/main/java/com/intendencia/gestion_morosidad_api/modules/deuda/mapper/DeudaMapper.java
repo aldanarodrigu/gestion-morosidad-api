@@ -37,6 +37,7 @@ public final class DeudaMapper {
                 .estado(deuda.getEstado())
                 .fechaSincronizacion(deuda.getFechaSincronizacion())
                 .accionesSugeridas(accionesSugeridas)
+                .contribuyenteId(deuda.getPadron().getContribuyente().getId())
                 .build();
     }
 
