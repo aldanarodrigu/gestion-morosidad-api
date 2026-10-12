@@ -5,6 +5,7 @@ import com.intendencia.gestion_morosidad_api.modules.contribuyente.dto.Contribuy
 import com.intendencia.gestion_morosidad_api.modules.padron.dto.PadronResponse;
 import com.intendencia.gestion_morosidad_api.modules.segmento.dto.SegmentoMoraResponse;
 import com.intendencia.gestion_morosidad_api.modules.tributo.dto.TributoResponse;
+import com.intendencia.gestion_morosidad_api.modules.accion.dto.AccionResponse;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -27,5 +28,6 @@ public record DeudaResponse(
         LocalDate fechaUltimoCobro,
         BigDecimal importeUltimoCobro,
         EstadoDeuda estado,
-        LocalDateTime fechaSincronizacion) {
+        LocalDateTime fechaSincronizacion,
+        List<AccionResponse> accionesSugeridas) {
 }

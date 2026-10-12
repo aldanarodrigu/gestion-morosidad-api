@@ -1,5 +1,6 @@
 package com.intendencia.gestion_morosidad_api.modules.deuda.mapper;
 
+import com.intendencia.gestion_morosidad_api.modules.accion.dto.AccionResponse;
 import com.intendencia.gestion_morosidad_api.modules.deuda.dto.DeudaResponse;
 import com.intendencia.gestion_morosidad_api.modules.deuda.entity.Deuda;
 import com.intendencia.gestion_morosidad_api.modules.padron.dto.PadronResponse;
@@ -16,7 +17,7 @@ public final class DeudaMapper {
     }
 
     /** @param hoy fecha de referencia para calcular los días de atraso */
-    public static DeudaResponse toResponse(Deuda deuda, LocalDate hoy) {
+    public static DeudaResponse toResponse(Deuda deuda, LocalDate hoy, List<AccionResponse> accionesSugeridas) {
         Padron padron = deuda.getPadron();
         PadronResponse padronResponse = PadronResponse.de(padron);
         return DeudaResponse.builder()
@@ -35,6 +36,7 @@ public final class DeudaMapper {
                 .importeUltimoCobro(deuda.getImporteUltimoCobro())
                 .estado(deuda.getEstado())
                 .fechaSincronizacion(deuda.getFechaSincronizacion())
+                .accionesSugeridas(accionesSugeridas)
                 .build();
     }
 

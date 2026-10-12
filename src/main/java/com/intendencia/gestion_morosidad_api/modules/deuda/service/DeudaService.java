@@ -1,5 +1,7 @@
 package com.intendencia.gestion_morosidad_api.modules.deuda.service;
 
+import com.intendencia.gestion_morosidad_api.modules.accion.dto.AccionResponse;
+import com.intendencia.gestion_morosidad_api.modules.accion_segmento.AccionSegmentoRepository;
 import com.intendencia.gestion_morosidad_api.modules.deuda.dto.DeudaFiltro;
 import com.intendencia.gestion_morosidad_api.modules.deuda.dto.DeudaResponse;
 import com.intendencia.gestion_morosidad_api.modules.deuda.entity.Deuda;
@@ -15,7 +17,10 @@ import com.intendencia.gestion_morosidad_api.shared.dto.PaginaResponse;
 import com.intendencia.gestion_morosidad_api.shared.exception.RecursoNoEncontradoException;
 import java.time.Clock;
 import java.time.LocalDate;
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.event.EventListener;
@@ -32,16 +37,53 @@ public class DeudaService {
     private final DeudaRepository deudaRepository;
     private final ConfiguracionSegmentoService configuracionSegmentoService;
     private final Clock clock;
+    private final AccionSegmentoRepository accionSegmentoRepository;
 
-    public PaginaResponse<DeudaResponse> listar(DeudaFiltro filtro, Pageable pageable) {
+    public PaginaResponse<DeudaResponse> listar(
+            DeudaFiltro filtro,
+            Pageable pageable
+    ) {
         LocalDate hoy = LocalDate.now(clock);
-        return PaginaResponse.de(
-                deudaRepository.findAll(DeudaSpecifications.conFiltro(filtro), pageable)
-                        .map(deuda -> DeudaMapper.toResponse(deuda, hoy)));
+
+        var pagina = deudaRepository.findAll(
+                DeudaSpecifications.conFiltro(filtro),
+                pageable
+        );
+
+        List<Long> segmentoIds = pagina.getContent().stream()
+                .map(Deuda::getSegmentoMora)
+                .filter(segmento -> segmento != null)
+                .map(segmento -> segmento.getId())
+                .distinct()
+                .toList();
+
+        Map<Long, List<AccionResponse>> accionesPorSegmento =
+                obtenerAccionesPorSegmento(segmentoIds);
+
+        return PaginaResponse.de(pagina.map(deuda -> {
+            Long segmentoId = deuda.getSegmentoMora() == null
+                    ? null
+                    : deuda.getSegmentoMora().getId();
+
+            List<AccionResponse> acciones = segmentoId == null
+                    ? List.of()
+                    : accionesPorSegmento.getOrDefault(
+                    segmentoId,
+                    List.of()
+            );
+
+            return DeudaMapper.toResponse(deuda, hoy, acciones);
+        }));
     }
 
     public DeudaResponse obtener(Long id) {
-        return DeudaMapper.toResponse(buscar(id), LocalDate.now(clock));
+        Deuda deuda = buscar(id);
+        LocalDate hoy = LocalDate.now(clock);
+
+        List<AccionResponse> acciones =
+                obtenerAccionesDeuda(deuda);
+
+        return DeudaMapper.toResponse(deuda, hoy, acciones);
     }
 
     public List<TributoResponse> listarTributos(Long id) {
@@ -50,37 +92,140 @@ public class DeudaService {
 
     public List<DeudaResponse> listarPorPadron(String numeroPadron) {
         LocalDate hoy = LocalDate.now(clock);
-        return deudaRepository.findByPadronNumeroPadronOrderByDeudaDesdeAsc(numeroPadron.trim()).stream()
-                .map(deuda -> DeudaMapper.toResponse(deuda, hoy))
+
+        List<Deuda> deudas = deudaRepository
+                .findByPadronNumeroPadronOrderByDeudaDesdeAsc(
+                        numeroPadron.trim()
+                );
+
+        List<Long> segmentoIds = deudas.stream()
+                .map(Deuda::getSegmentoMora)
+                .filter(segmento -> segmento != null)
+                .map(segmento -> segmento.getId())
+                .distinct()
+                .toList();
+
+        Map<Long, List<AccionResponse>> accionesPorSegmento =
+                obtenerAccionesPorSegmento(segmentoIds);
+
+        return deudas.stream()
+                .map(deuda -> {
+                    Long segmentoId = deuda.getSegmentoMora() == null
+                            ? null
+                            : deuda.getSegmentoMora().getId();
+
+                    List<AccionResponse> acciones = segmentoId == null
+                            ? List.of()
+                            : accionesPorSegmento.getOrDefault(
+                            segmentoId,
+                            List.of()
+                    );
+
+                    return DeudaMapper.toResponse(
+                            deuda,
+                            hoy,
+                            acciones
+                    );
+                })
                 .toList();
     }
 
     @Transactional
-    public DeudaResponse actualizarEstado(Long id, EstadoDeuda nuevoEstado) {
+    public DeudaResponse actualizarEstado(
+            Long id,
+            EstadoDeuda nuevoEstado
+    ) {
         Deuda deuda = buscar(id);
         EstadoDeuda anterior = deuda.getEstado();
+
         deuda.setEstado(nuevoEstado);
-        // Sin datos personales en el log: solo id y estados
-        log.info("Estado de deuda {} actualizado: {} -> {}", id, anterior, nuevoEstado);
-        return DeudaMapper.toResponse(deudaRepository.save(deuda), LocalDate.now(clock));
+
+        log.info(
+                "Estado de deuda {} actualizado: {} -> {}",
+                id,
+                anterior,
+                nuevoEstado
+        );
+
+        Deuda deudaActualizada = deudaRepository.save(deuda);
+
+        return DeudaMapper.toResponse(
+                deudaActualizada,
+                LocalDate.now(clock),
+                obtenerAccionesDeuda(deudaActualizada)
+        );
     }
 
     /**
-     * Recalcula el segmento de todas las deudas no canceladas cuando el Administrador cambia los rangos.
-     * Corre dentro de la misma transacción que el cambio de configuración.
+     * Recalcula el segmento de todas las deudas no canceladas
+     * cuando el administrador cambia los rangos.
      */
     @EventListener
     @Transactional
-    public void recalcularSegmentos(ConfiguracionSegmentoCambiadaEvent evento) {
-        ReglasSegmentacion reglas = configuracionSegmentoService.reglasVigentes();
+    public void recalcularSegmentos(
+            ConfiguracionSegmentoCambiadaEvent evento
+    ) {
+        ReglasSegmentacion reglas =
+                configuracionSegmentoService.reglasVigentes();
+
         LocalDate hoy = LocalDate.now(clock);
-        List<Deuda> deudas = deudaRepository.findByEstadoNot(EstadoDeuda.CANCELADA);
-        deudas.forEach(deuda -> deuda.setSegmentoMora(reglas.segmentoPara(deuda.getDeudaDesde(), hoy)));
-        log.info("Segmentos recalculados para {} deudas", deudas.size());
+
+        List<Deuda> deudas =
+                deudaRepository.findByEstadoNot(EstadoDeuda.CANCELADA);
+
+        deudas.forEach(deuda ->
+                deuda.setSegmentoMora(
+                        reglas.segmentoPara(deuda.getDeudaDesde(), hoy)
+                )
+        );
+
+        log.info(
+                "Segmentos recalculados para {} deudas",
+                deudas.size()
+        );
+    }
+
+    private List<AccionResponse> obtenerAccionesDeuda(Deuda deuda) {
+        if (deuda.getSegmentoMora() == null) {
+            return List.of();
+        }
+
+        Long segmentoId = deuda.getSegmentoMora().getId();
+
+        return obtenerAccionesPorSegmento(List.of(segmentoId))
+                .getOrDefault(segmentoId, List.of());
+    }
+
+    private Map<Long, List<AccionResponse>> obtenerAccionesPorSegmento(
+            Collection<Long> segmentoIds
+    ) {
+        if (segmentoIds.isEmpty()) {
+            return Map.of();
+        }
+
+        return accionSegmentoRepository
+                .findBySegmentoMora_IdIn(segmentoIds)
+                .stream()
+                .filter(as -> as.getAccion().getActivo())
+                .collect(Collectors.groupingBy(
+                        as -> as.getSegmentoMora().getId(),
+                        Collectors.mapping(
+                                as -> new AccionResponse(
+                                        as.getAccion().getId(),
+                                        as.getAccion().getNombre(),
+                                        as.getAccion().getActivo()
+                                ),
+                                Collectors.toList()
+                        )
+                ));
     }
 
     private Deuda buscar(Long id) {
         return deudaRepository.findById(id)
-                .orElseThrow(() -> new RecursoNoEncontradoException("No existe la deuda con id " + id));
+                .orElseThrow(() ->
+                        new RecursoNoEncontradoException(
+                                "No existe la deuda con id " + id
+                        )
+                );
     }
 }
