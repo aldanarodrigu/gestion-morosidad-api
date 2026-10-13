@@ -27,6 +27,7 @@ public class Contribuyente {
 
     private String documento;
 
+    @org.hibernate.annotations.BatchSize(size = 50)
     @OneToMany(mappedBy = "contribuyente", fetch = FetchType.LAZY)
     private List<Contacto> contactos = new ArrayList<>();
 }

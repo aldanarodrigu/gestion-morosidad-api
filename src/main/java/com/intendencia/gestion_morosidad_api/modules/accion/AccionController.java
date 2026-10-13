@@ -4,6 +4,7 @@ import com.intendencia.gestion_morosidad_api.modules.accion.dto.AccionRequest;
 import com.intendencia.gestion_morosidad_api.modules.accion.dto.AccionResponse;
 import com.intendencia.gestion_morosidad_api.modules.accion.dto.AccionUpdateRequest;
 import jakarta.validation.Valid;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -32,6 +33,7 @@ public class AccionController {
     }
 
     // POST /api/acciones
+    @PreAuthorize("hasRole('ADMINISTRADOR')")
     @PostMapping
     public ResponseEntity<AccionResponse> create(
             @Valid @RequestBody AccionRequest accionRequest) {
@@ -42,6 +44,7 @@ public class AccionController {
     }
 
     // PUT /api/acciones/{id}
+    @PreAuthorize("hasRole('ADMINISTRADOR')")
     @PutMapping("/{id}")
     public ResponseEntity<AccionResponse> updateEstado(
             @PathVariable Long id,
@@ -53,6 +56,7 @@ public class AccionController {
     }
 
     // DELETE /api/acciones/{id}
+    @PreAuthorize("hasRole('ADMINISTRADOR')")
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable Long id) {
 

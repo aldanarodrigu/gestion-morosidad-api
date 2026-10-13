@@ -24,7 +24,7 @@ public class DataInitializer {
 
                 admin.setUsername("admin");
                 admin.setPassword(passwordEncoder.encode("admin123"));
-                admin.setRol(Rol.ADMINISTRADOR);
+                admin.setRoles(java.util.Set.of(Rol.ADMINISTRADOR));
                 admin.setActivo(true);
 
                 usuarioRepository.save(admin);

@@ -1,5 +1,6 @@
 package com.intendencia.gestion_morosidad_api.modules.gestion;
 
+import java.security.Principal;
 import com.intendencia.gestion_morosidad_api.modules.accion.dto.AccionResponse;
 import com.intendencia.gestion_morosidad_api.modules.gestion.dto.GestionRequest;
 import com.intendencia.gestion_morosidad_api.modules.gestion.dto.GestionResponse;
@@ -7,11 +8,13 @@ import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 import java.util.List;
 
 @RestController
 @RequestMapping("/api/gestiones")
+@PreAuthorize("hasAnyRole('ADMINISTRADOR', 'NOTIFICADOR', 'ANALISTA')")
 public class GestionController {
 
     private final GestionService gestionService;
@@ -25,6 +28,11 @@ public class GestionController {
         return ResponseEntity.ok(
                 gestionService.getAllGestiones()
         );
+    }
+
+    @GetMapping("/deuda/{deudaId}")
+    public List<GestionResponse> listarPorDeuda(@PathVariable Long deudaId) {
+        return gestionService.listarPorDeuda(deudaId);
     }
 
     @GetMapping("/{id}")
@@ -46,11 +54,12 @@ public class GestionController {
     }
 
     @PostMapping
+    @PreAuthorize("hasRole('NOTIFICADOR')")
     public ResponseEntity<GestionResponse> create(
-            @Valid @RequestBody GestionRequest request
+            @Valid @RequestBody GestionRequest request, Principal principal
     ) {
         return ResponseEntity
                 .status(HttpStatus.CREATED)
-                .body(gestionService.createGestion(request));
+                .body(gestionService.createGestion(request, principal.getName()));
     }
 }

@@ -26,6 +26,6 @@ public class AuthService {
                 .orElseThrow(() -> new RecursoNoEncontradoException("Usuario no encontrado"));
 
         String token = tokenService.generateToken(usuario);
-        return new LoginResponse(token, usuario.getId(), usuario.getUsername(), usuario.getRol());
+        return new LoginResponse(token, usuario.getId(), usuario.getUsername(), java.util.Set.copyOf(usuario.getRoles()));
     }
 }

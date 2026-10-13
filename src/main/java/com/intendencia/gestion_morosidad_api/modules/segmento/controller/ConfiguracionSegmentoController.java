@@ -5,6 +5,10 @@ import com.intendencia.gestion_morosidad_api.modules.segmento.dto.ConfiguracionS
 import com.intendencia.gestion_morosidad_api.modules.segmento.service.ConfiguracionSegmentoService;
 import jakarta.validation.Valid;
 import java.util.List;
+import com.intendencia.gestion_morosidad_api.modules.segmento.dto.PeriodosMoraRequest;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -26,8 +30,8 @@ public class ConfiguracionSegmentoController {
     /** Rangos vigentes; con ?historial=true incluye los reemplazados (auditoría de cambios). */
     @GetMapping
     @PreAuthorize("hasAnyRole('ADMINISTRADOR', 'NOTIFICADOR', 'ANALISTA')")
-    public List<ConfiguracionSegmentoResponse> listar(@RequestParam(defaultValue = "false") boolean historial) {
-        return configuracionService.listar(historial);
+    public List<ConfiguracionSegmentoResponse> listar(@RequestParam(defaultValue = "false") boolean historial, @RequestParam(required = false) Long tributoId) {
+        return tributoId == null ? configuracionService.listar(historial) : configuracionService.listar(historial, tributoId);
     }
 
     /** Asigna un nuevo rango a un segmento (reemplaza el vigente) y recalcula los segmentos de las deudas. */
@@ -37,4 +41,16 @@ public class ConfiguracionSegmentoController {
     public ConfiguracionSegmentoResponse crear(@Valid @RequestBody ConfiguracionSegmentoRequest request) {
         return configuracionService.crear(request);
     }
+    @PutMapping
+    @PreAuthorize("hasRole('ADMINISTRADOR')")
+    public List<ConfiguracionSegmentoResponse> actualizarPeriodos(@Valid @RequestBody PeriodosMoraRequest request) {
+        return configuracionService.actualizarPeriodos(request);
+    }
+    @DeleteMapping("/tributo/{tributoId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @PreAuthorize("hasRole('ADMINISTRADOR')")
+    public void restaurarBase(@PathVariable Long tributoId) {
+        configuracionService.restaurarBase(tributoId);
+    }
+
 }

@@ -27,7 +27,7 @@ public class TokenService {
 
         JwtClaimsSet claims = JwtClaimsSet.builder()
                 .subject(usuario.getUsername())
-                .claim("rol", usuario.getRol().name())
+                .claim("roles", usuario.getRoles().stream().map(Enum::name).sorted().toList())
                 .issuedAt(now)
                 .expiresAt(now.plusSeconds(expirationSeconds))
                 .build();

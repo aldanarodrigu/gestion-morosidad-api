@@ -45,48 +45,22 @@ public class DeudaService {
             DeudaFiltro filtro,
             Pageable pageable
     ) {
+        var pagina = deudaRepository.findAll(DeudaSpecifications.conFiltro(filtro), pageable);
+        return new PaginaResponse<>(mapearDeudas(pagina.getContent()), pagina.getNumber(),
+                pagina.getSize(), pagina.getTotalElements(), pagina.getTotalPages());
+    }
+
+    /** Enriquecimiento compartido para la cartera individual y agrupada, en consultas por lote. */
+    List<DeudaResponse> mapearDeudas(List<Deuda> deudas) {
         LocalDate hoy = LocalDate.now(clock);
-
-        var pagina = deudaRepository.findAll(
-                DeudaSpecifications.conFiltro(filtro),
-                pageable
-        );
-
-        List<Long> segmentoIds = pagina.getContent().stream()
-                .map(Deuda::getSegmentoMora)
-                .filter(segmento -> segmento != null)
-                .map(segmento -> segmento.getId())
-                .distinct()
-                .toList();
-
-        Map<Long, List<AccionResponse>> accionesPorSegmento =
-                obtenerAccionesPorSegmento(segmentoIds);
-
-        Map<Long, Long> gestionesPorDeuda = contarGestiones(
-                pagina.getContent().stream()
-                        .map(Deuda::getId)
-                        .toList()
-        );
-
-        return PaginaResponse.de(pagina.map(deuda -> {
-            Long segmentoId = deuda.getSegmentoMora() == null
-                    ? null
-                    : deuda.getSegmentoMora().getId();
-
-            List<AccionResponse> acciones = segmentoId == null
-                    ? List.of()
-                    : accionesPorSegmento.getOrDefault(
-                    segmentoId,
-                    List.of()
-            );
-
-            return DeudaMapper.toResponse(deuda, hoy, acciones)
-                    .toBuilder()
-                    .cantidadGestiones(
-                            gestionesPorDeuda.getOrDefault(deuda.getId(), 0L)
-                    )
-                    .build();
-        }));
+        List<Long> segmentoIds = deudas.stream().map(Deuda::getSegmentoMora)
+                .filter(java.util.Objects::nonNull).map(s -> s.getId()).distinct().toList();
+        var acciones = obtenerAccionesPorSegmento(segmentoIds);
+        var gestiones = contarGestiones(deudas.stream().map(Deuda::getId).toList());
+        return deudas.stream().map(deuda -> DeudaMapper.toResponse(deuda, hoy,
+                        deuda.getSegmentoMora() == null ? List.of()
+                                : acciones.getOrDefault(deuda.getSegmentoMora().getId(), List.of()))
+                .toBuilder().cantidadGestiones(gestiones.getOrDefault(deuda.getId(), 0L)).build()).toList();
     }
 
     public DeudaResponse obtener(Long id) {
@@ -188,7 +162,7 @@ public class DeudaService {
 
         deudas.forEach(deuda ->
                 deuda.setSegmentoMora(
-                        reglas.segmentoPara(deuda.getDeudaDesde(), hoy)
+                        reglas.segmentoPara(deuda.getDeudaDesde(), hoy, deuda.getTributos())
                 )
         );
 

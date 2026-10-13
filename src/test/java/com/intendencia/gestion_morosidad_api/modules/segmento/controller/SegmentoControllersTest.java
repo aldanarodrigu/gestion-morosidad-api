@@ -65,7 +65,7 @@ class SegmentoControllersTest {
     @Test
     void listarConfiguracionesConHistorial() throws Exception {
         when(configuracionService.listar(true)).thenReturn(List.of(
-                new ConfiguracionSegmentoResponse(1L, 1L, "Mora Temprana", 0, 90, false, null)));
+                new ConfiguracionSegmentoResponse(1L, 1L, "Mora Temprana", 0, 90, false, null, null)));
 
         mockMvc.perform(get("/api/configuraciones-segmento").param("historial", "true"))
                 .andExpect(status().isOk())

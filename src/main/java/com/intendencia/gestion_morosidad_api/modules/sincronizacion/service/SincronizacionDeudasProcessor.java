@@ -204,7 +204,7 @@ class SincronizacionDeudasProcessor {
         deuda.setConvenio(convenio);
         actualizarTributos(deuda, CodigosTributo.parsear(fila.tributosDeuda()), ctx);
         deuda.setEstado(ReglasEstadoDeuda.enPendientes(deuda.getEstado(), convenio));
-        deuda.setSegmentoMora(ctx.reglas.segmentoPara(deuda.getDeudaDesde(), ctx.hoy));
+        deuda.setSegmentoMora(ctx.reglas.segmentoPara(deuda.getDeudaDesde(), ctx.hoy, deuda.getTributos()));
         deuda.setFechaSincronizacion(ctx.ahora);
     }
 
@@ -292,16 +292,18 @@ class SincronizacionDeudasProcessor {
                 Padron padron = ctx.padronesPorCm.get(cm);
                 if (padron != null && padron.getContribuyente() != null) {
                     Contribuyente contribuyente = padron.getContribuyente();
-                    String nombre = texto(cobro.persona());
-                    if (nombre != null) {
-                        if (!nombre.equals(contribuyente.getNombre())) {
-                            contribuyente.setDocumento(null);
+                    String documento = limitar(texto(cobro.documento()), 50);
+                    String documentoActual = texto(contribuyente.getDocumento());
+                    // Un cobro histórico puede corresponder a otra persona: no cambia la identidad
+                    // del titular actual. Un nombre distinto tampoco basta para borrar su documento.
+                    if (documentoActual == null || documento == null || documentoActual.equals(documento)) {
+                        String nombre = texto(cobro.persona());
+                        if (nombre != null) {
+                            contribuyente.setNombre(limitar(nombre, 255));
                         }
-                        contribuyente.setNombre(limitar(nombre, 255));
-                    }
-                    String documento = texto(cobro.documento());
-                    if (documento != null) {
-                        contribuyente.setDocumento(limitar(documento, 50));
+                        if (documentoActual == null && documento != null) {
+                            contribuyente.setDocumento(documento);
+                        }
                     }
                 }
             }

@@ -56,11 +56,11 @@ public class ContactoService {
         }
 
         contacto.setTipoContacto(request.tipoContacto());
-        contacto.setValor(request.valor());
+        contacto.setValor(request.valor().trim());
         contacto.setEsDeContribuyente(
                 request.esDeContribuyente()
         );
-        contacto.setOrigen(request.origen());
+        contacto.setOrigen(request.origen().trim());
 
         contacto = contactoRepository.save(contacto);
 

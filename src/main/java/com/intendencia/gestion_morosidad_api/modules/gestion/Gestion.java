@@ -1,5 +1,6 @@
 package com.intendencia.gestion_morosidad_api.modules.gestion;
 
+import com.intendencia.gestion_morosidad_api.modules.usuario.Usuario;
 import com.intendencia.gestion_morosidad_api.modules.accion.Accion;
 import com.intendencia.gestion_morosidad_api.modules.deuda.entity.Deuda;
 import jakarta.persistence.*;
@@ -47,4 +48,8 @@ public class Gestion {
             foreignKey = @ForeignKey(name = "fk_gestion_accion")
     )
     private Accion accion;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "usuario_id", foreignKey = @ForeignKey(name = "fk_gestion_usuario"))
+    private Usuario usuario;
 }

@@ -4,5 +4,8 @@ public enum ResultadoGestion {
     EXITOSA,
     NO_LOCALIZADO,
     RECHAZADA,
-    PENDIENTE
+    PENDIENTE,
+    RESPONDIO,
+    NO_RESPONDIO,
+    PROXIMO_A_VENIR
 }

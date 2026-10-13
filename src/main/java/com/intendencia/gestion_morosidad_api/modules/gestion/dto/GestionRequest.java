@@ -1,7 +1,7 @@
 package com.intendencia.gestion_morosidad_api.modules.gestion.dto;
 
 import com.intendencia.gestion_morosidad_api.modules.gestion.ResultadoGestion;
-import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
@@ -9,7 +9,6 @@ import java.time.LocalDateTime;
 
 public record GestionRequest(
 
-        @NotNull(message = "La fecha es obligatoria")
         LocalDateTime fecha,
 
         @NotNull(message = "El resultado es obligatorio")
@@ -19,9 +18,11 @@ public record GestionRequest(
         String observacion,
 
         @NotNull(message = "La deuda es obligatoria")
+        @Positive(message = "El identificador debe ser positivo")
         Long deudaId,
 
         @NotNull(message = "La acción es obligatoria")
+        @Positive(message = "El identificador debe ser positivo")
         Long accionId
 ) {
 }

@@ -55,7 +55,7 @@ class DeudaControllerTest {
                 .andExpect(jsonPath("$.contenido[0].contribuyente.nombre").value("Persona de ejemplo"))
                 .andExpect(jsonPath("$.totalElementos").value(1));
 
-        verify(deudaService).listar(eq(new DeudaFiltro(EstadoDeuda.PENDIENTE, "4567", "perez", "Libertad", 2L)), any());
+        verify(deudaService).listar(eq(new DeudaFiltro(EstadoDeuda.PENDIENTE, "4567", "perez", "Libertad", 2L, null, null)), any());
     }
 
     @Test

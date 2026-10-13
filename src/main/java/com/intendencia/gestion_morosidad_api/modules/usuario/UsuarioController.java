@@ -4,7 +4,7 @@ import com.intendencia.gestion_morosidad_api.modules.usuario.dto.UsuarioRequest;
 import com.intendencia.gestion_morosidad_api.modules.usuario.dto.UsuarioResponse;
 import com.intendencia.gestion_morosidad_api.modules.usuario.dto.UsuarioUpdateRequest;
 import jakarta.validation.Valid;
-import org.apache.coyote.Response;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -13,6 +13,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/usuarios")
+@PreAuthorize("hasRole('ADMINISTRADOR')")
 public class UsuarioController {
 
     private final UsuarioService usuarioService;
@@ -33,8 +34,8 @@ public class UsuarioController {
         return ResponseEntity.ok(usuarioService.getUsuarioById(id));
     }
 
-    // POST /api/usuarios/1
-    @PostMapping("/{id}")
+    // POST /api/usuarios
+    @PostMapping
     public ResponseEntity<UsuarioResponse>create(@Valid @RequestBody UsuarioRequest usuarioRequest){
         UsuarioResponse response = usuarioService.saveUser(usuarioRequest);
 
