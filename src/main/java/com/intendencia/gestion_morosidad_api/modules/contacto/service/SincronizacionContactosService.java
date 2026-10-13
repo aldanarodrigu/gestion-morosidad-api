@@ -9,12 +9,11 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/** Actualiza solo los contactos importados de cada fuente; los contactos manuales quedan intactos. */
+/** Importa contactos faltantes por tipo y fuente sin modificar ni eliminar los existentes. */
 @Service
 @RequiredArgsConstructor
 public class SincronizacionContactosService {
@@ -43,29 +42,23 @@ public class SincronizacionContactosService {
         }
         List<Contribuyente> contribuyentes = datos.stream().map(Dato::contribuyente).distinct().toList();
         Map<Clave, Contacto> existentes = new HashMap<>();
-        List<Contacto> borrar = new ArrayList<>();
         for (Contacto contacto : buscarContactos(contribuyentes)) {
             Clave clave = new Clave(contacto.getContribuyente().getId(),
                     contacto.getTipoContacto(), contacto.getOrigen());
-            if (ultimos.containsKey(clave) && existentes.putIfAbsent(clave, contacto) != null) {
-                borrar.add(contacto);
-            }
+            existentes.putIfAbsent(clave, contacto);
         }
 
         List<Contacto> guardar = new ArrayList<>();
         for (Dato dato : ultimos.values()) {
             Clave clave = new Clave(dato.contribuyente().getId(), dato.tipo(), dato.origen());
-            Contacto actual = existentes.get(clave);
+            if (existentes.containsKey(clave)) {
+                continue;
+            }
             String valor = dato.valor() == null ? null : dato.valor().trim();
             if (valor != null && valor.length() > 255) {
                 valor = valor.substring(0, 255);
             }
-            if (valor == null || valor.isEmpty()) {
-                if (actual != null) {
-                    borrar.add(actual);
-                    existentes.remove(clave);
-                }
-            } else if (actual == null) {
+            if (valor != null && !valor.isEmpty()) {
                 Contacto nuevo = new Contacto();
                 nuevo.setContribuyente(dato.contribuyente());
                 nuevo.setTipoContacto(dato.tipo());
@@ -74,14 +67,8 @@ public class SincronizacionContactosService {
                 nuevo.setEsDeContribuyente(dato.esDeContribuyente());
                 guardar.add(nuevo);
                 existentes.put(clave, nuevo);
-            } else if (!Objects.equals(actual.getValor(), valor)
-                    || !Objects.equals(actual.getEsDeContribuyente(), dato.esDeContribuyente())) {
-                actual.setValor(valor);
-                actual.setEsDeContribuyente(dato.esDeContribuyente());
-                guardar.add(actual);
             }
         }
-        contactoRepository.deleteAll(borrar);
         contactoRepository.saveAll(guardar);
     }
 

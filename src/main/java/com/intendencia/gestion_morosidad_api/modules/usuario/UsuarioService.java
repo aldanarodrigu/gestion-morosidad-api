@@ -7,10 +7,13 @@ import com.intendencia.gestion_morosidad_api.shared.exception.RecursoNoEncontrad
 import com.intendencia.gestion_morosidad_api.shared.exception.RecursoYaExisteException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import java.util.HashSet;
 
 import java.util.List;
 
 @Service
+@Transactional(readOnly = true)
 public class UsuarioService {
 
     private final UsuarioRepository usuarioRepository;
@@ -38,19 +41,20 @@ public class UsuarioService {
         return mapToResponse(usuario);
     }
 
+    @Transactional
     public UsuarioResponse saveUser(UsuarioRequest usuarioRequest) {
 
-        if (usuarioRepository.existsByUsername(usuarioRequest.username())) {
-            throw new RecursoYaExisteException("El usuario '" + usuarioRequest.username() + "' ya existe");
+        if (usuarioRepository.existsByUsername(usuarioRequest.username().trim())) {
+            throw new RecursoYaExisteException("El usuario '" + usuarioRequest.username().trim() + "' ya existe");
         }
 
         Usuario usuario = new Usuario();
 
-        usuario.setUsername(usuarioRequest.username());
+        usuario.setUsername(usuarioRequest.username().trim());
         usuario.setPassword(
                 passwordEncoder.encode(usuarioRequest.password())
         );
-        usuario.setRol(usuarioRequest.rol());
+        usuario.setRoles(new HashSet<>(usuarioRequest.roles()));
         usuario.setActivo(true);
 
         usuarioRepository.save(usuario);
@@ -58,18 +62,19 @@ public class UsuarioService {
         return mapToResponse(usuario);
     }
 
+    @Transactional
     public UsuarioResponse updateUser(
             Long id,
             UsuarioUpdateRequest request) {
 
         Usuario usuario = usuarioRepository.findById(id).orElseThrow(() -> new RecursoNoEncontradoException("Usuario con id " + id + " no encontrado"));
 
-        if (!usuario.getUsername().equals(request.username()) && usuarioRepository.existsByUsername(request.username())) {
-            throw new RecursoYaExisteException("El usuario '" + request.username() + "' ya existe");
+        if (!usuario.getUsername().equals(request.username().trim()) && usuarioRepository.existsByUsername(request.username().trim())) {
+            throw new RecursoYaExisteException("El usuario '" + request.username().trim() + "' ya existe");
         }
 
-        usuario.setUsername(request.username());
-        usuario.setRol(request.rol());
+        usuario.setUsername(request.username().trim());
+        usuario.setRoles(new HashSet<>(request.roles()));
         usuario.setActivo(request.activo());
 
         usuarioRepository.save(usuario);
@@ -81,7 +86,7 @@ public class UsuarioService {
         return new UsuarioResponse(
                 usuario.getId(),
                 usuario.getUsername(),
-                usuario.getRol(),
+                java.util.Set.copyOf(usuario.getRoles()),
                 usuario.getActivo()
         );
     }

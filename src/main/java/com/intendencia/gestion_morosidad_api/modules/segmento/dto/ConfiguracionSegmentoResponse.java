@@ -10,7 +10,8 @@ public record ConfiguracionSegmentoResponse(
         Integer diasDesde,
         Integer diasHasta,
         boolean activa,
-        LocalDateTime fechaCreacion) {
+        LocalDateTime fechaCreacion,
+        Long tributoId) {
 
     public static ConfiguracionSegmentoResponse de(ConfiguracionSegmento configuracion) {
         return new ConfiguracionSegmentoResponse(
@@ -20,6 +21,7 @@ public record ConfiguracionSegmentoResponse(
                 configuracion.getDiasDesde(),
                 configuracion.getDiasHasta(),
                 configuracion.isActiva(),
-                configuracion.getFechaCreacion());
+                configuracion.getFechaCreacion(),
+                configuracion.getTributo() == null ? null : configuracion.getTributo().getId());
     }
 }

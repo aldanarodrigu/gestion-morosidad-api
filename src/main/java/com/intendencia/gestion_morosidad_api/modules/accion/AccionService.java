@@ -9,20 +9,30 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.stream.Collectors;
+import lombok.RequiredArgsConstructor;
+import com.intendencia.gestion_morosidad_api.modules.accion_segmento.AccionSegmento;
+import com.intendencia.gestion_morosidad_api.modules.accion_segmento.AccionSegmentoRepository;
+import com.intendencia.gestion_morosidad_api.modules.segmento.repository.SegmentoMoraRepository;
+import com.intendencia.gestion_morosidad_api.modules.segmento.dto.SegmentoMoraResponse;
 
 @Service
+@RequiredArgsConstructor
+@Transactional(readOnly = true)
 public class AccionService {
 
     private final AccionRepository accionRepository;
 
-    public AccionService(AccionRepository accionRepository) {
-        this.accionRepository = accionRepository;
-    }
+    private final AccionSegmentoRepository accionSegmentoRepository;
+    private final SegmentoMoraRepository segmentoMoraRepository;
 
     public List<AccionResponse> getAllAcciones() {
-        return accionRepository.findAll()
-                .stream()
-                .map(this::mapToResponse)
+        var porAccion = accionSegmentoRepository.findAllByOrderByIdAsc().stream()
+                .collect(Collectors.groupingBy(v -> v.getAccion().getId(),
+                        Collectors.mapping(v -> SegmentoMoraResponse.de(v.getSegmentoMora()), Collectors.toList())));
+        return accionRepository.findAll().stream()
+                .map(a -> new AccionResponse(a.getId(), a.getNombre(), a.getActivo(),
+                        porAccion.getOrDefault(a.getId(), List.of())))
                 .toList();
     }
 
@@ -39,19 +49,26 @@ public class AccionService {
     @Transactional
     public AccionResponse createAccion(AccionRequest request) {
 
-        if (accionRepository.existsByNombreIgnoreCase(request.nombre())) {
+        var segmento = segmentoMoraRepository.findById(request.segmentoId())
+                .orElseThrow(() -> new RecursoNoEncontradoException("No existe el segmento de mora indicado"));
+        String nombre = request.nombre().trim();
+        if (accionRepository.existsByNombreIgnoreCase(nombre)) {
             throw new RecursoYaExisteException(
                     "Ya existe una acción con el nombre: " + request.nombre()
             );
         }
 
         Accion accion = new Accion();
-        accion.setNombre(request.nombre());
+        accion.setNombre(nombre);
         accion.setActivo(true);
 
         Accion accionGuardada = accionRepository.save(accion);
-
-        return mapToResponse(accionGuardada);
+        AccionSegmento vinculo = new AccionSegmento();
+        vinculo.setAccion(accionGuardada);
+        vinculo.setSegmentoMora(segmento);
+        accionSegmentoRepository.save(vinculo);
+        return new AccionResponse(accionGuardada.getId(), accionGuardada.getNombre(),
+                accionGuardada.getActivo(), List.of(SegmentoMoraResponse.de(segmento)));
     }
 
     @Transactional
@@ -84,7 +101,9 @@ public class AccionService {
         return new AccionResponse(
                 accion.getId(),
                 accion.getNombre(),
-                accion.getActivo()
+                accion.getActivo(),
+                accionSegmentoRepository.findByAccion_Id(accion.getId()).stream()
+                        .map(v -> SegmentoMoraResponse.de(v.getSegmentoMora())).toList()
         );
     }
 }

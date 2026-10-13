@@ -12,5 +12,11 @@ public interface TributoRepository extends JpaRepository<Tributo, Long> {
     @Query("select t from Tributo t order by length(t.codigo), t.codigo")
     List<Tributo> findAllOrdenados();
 
+    @Query(value = "select exists(select 1 from deuda_tributo where tributo_id = :id)", nativeQuery = true)
+    boolean tieneDeudas(@org.springframework.data.repository.query.Param("id") Long id);
+
+    @Query(value = "select exists(select 1 from configuraciones_segmento where tributo_id = :id)", nativeQuery = true)
+    boolean tieneConfiguraciones(@org.springframework.data.repository.query.Param("id") Long id);
+
     Optional<Tributo> findByCodigo(String codigo);
 }

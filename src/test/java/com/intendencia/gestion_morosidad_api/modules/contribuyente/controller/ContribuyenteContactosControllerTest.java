@@ -6,6 +6,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -23,6 +24,8 @@ import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
@@ -33,8 +36,10 @@ import org.springframework.test.web.servlet.MockMvc;
 
 @WebMvcTest(ContribuyenteController.class)
 @Import(ContactoService.class)
-@WithMockUser
+@WithMockUser(roles = "NOTIFICADOR")
 class ContribuyenteContactosControllerTest {
+    @MockitoBean private com.intendencia.gestion_morosidad_api.modules.deuda.service.DeudaService deudaService;
+
 
     @Autowired private MockMvc mockMvc;
     @MockitoBean private ContribuyenteService contribuyenteService;
@@ -165,6 +170,58 @@ class ContribuyenteContactosControllerTest {
                 .andExpect(jsonPath("$.errores.esDeContribuyente").exists())
                 .andExpect(jsonPath("$.errores.origen").exists());
 
+        verify(contactoRepository, never()).save(any());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"NOTIFICADOR", "ANALISTA"})
+    void rolesOperativosPuedenConsultarCrearYEditarContactos(String rol) throws Exception {
+        Contacto existente = contacto(7L, TipoContacto.EMAIL, "antes@example.test");
+        when(contactoRepository.findByContribuyente(contribuyente)).thenReturn(List.of(existente));
+        when(contactoRepository.findByIdAndContribuyente(7L, contribuyente))
+                .thenReturn(Optional.of(existente));
+        when(contactoRepository.save(any(Contacto.class))).thenAnswer(invocation -> {
+            Contacto c = invocation.getArgument(0);
+            if (c.getId() == null) c.setId(8L);
+            return c;
+        });
+        mockMvc.perform(get("/api/contribuyentes/123/contactos").with(user("operador").roles(rol)))
+                .andExpect(status().isOk());
+        mockMvc.perform(put("/api/contribuyentes/123/contactos")
+                        .with(user("operador").roles(rol)).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"tipoContacto":"TELEFONO","valor":"099111111",
+                                 "esDeContribuyente":false,"origen":"Llamada"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(8));
+        mockMvc.perform(put("/api/contribuyentes/123/contactos")
+                        .with(user("operador").roles(rol)).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"id":7,"tipoContacto":"EMAIL","valor":" nuevo@example.test ",
+                                 "esDeContribuyente":true,"origen":" Declaracion "}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.valor").value("nuevo@example.test"))
+                .andExpect(jsonPath("$.origen").value("Declaracion"));
+        assertThat(existente.getContribuyente()).isSameAs(contribuyente);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"valor", "origen"})
+    void rechazaValoresQueSuperanElLimiteDeLaBase(String campo) throws Exception {
+        String valor = campo.equals("valor") ? "a".repeat(256) : "099111111";
+        String origen = campo.equals("origen") ? "a".repeat(256) : "MANUAL";
+        mockMvc.perform(put("/api/contribuyentes/123/contactos").with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"tipoContacto":"TELEFONO","valor":"%s",
+                                 "esDeContribuyente":true,"origen":"%s"}
+                                """.formatted(valor, origen)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errores." + campo).exists());
         verify(contactoRepository, never()).save(any());
     }
 

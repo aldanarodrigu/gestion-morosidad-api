@@ -13,6 +13,10 @@ public interface AccionSegmentoRepository
 
     List<AccionSegmento> findBySegmentoMora_Id(Long segmentoId);
 
+    @EntityGraph(attributePaths = "segmentoMora")
+    List<AccionSegmento> findAllByOrderByIdAsc();
+
+    @EntityGraph(attributePaths = "segmentoMora")
     List<AccionSegmento> findByAccion_Id(Long accionId);
 
     boolean existsByAccion_IdAndSegmentoMora_Id(

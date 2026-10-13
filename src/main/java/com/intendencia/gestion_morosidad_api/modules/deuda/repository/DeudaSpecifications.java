@@ -1,6 +1,7 @@
 package com.intendencia.gestion_morosidad_api.modules.deuda.repository;
 
 import com.intendencia.gestion_morosidad_api.modules.deuda.dto.DeudaFiltro;
+import com.intendencia.gestion_morosidad_api.modules.contacto.entity.Contacto;
 import com.intendencia.gestion_morosidad_api.modules.deuda.entity.Deuda;
 import com.intendencia.gestion_morosidad_api.modules.deuda.entity.EstadoDeuda;
 import com.intendencia.gestion_morosidad_api.modules.contribuyente.entity.Contribuyente;
@@ -77,6 +78,18 @@ public final class DeudaSpecifications {
                         cb.equal(tributoJoin.get("codigo"), filtro.tributo())
                 );
                 query.distinct(true);
+            }
+
+            if (filtro.conContacto() != null) {
+                // EXISTS evita multiplicar deudas/importes cuando hay varios contactos.
+                var contactos = query.subquery(Integer.class);
+                var contacto = contactos.from(Contacto.class);
+                contactos.select(cb.literal(1)).where(
+                        cb.equal(contacto.get("contribuyente"), padron.get("contribuyente")),
+                        cb.notEqual(cb.function("btrim", String.class,
+                                contacto.<String>get("valor"), cb.literal(" \t\r\n\f\u000B")), ""));
+                var existe = cb.exists(contactos);
+                predicados.add(filtro.conContacto() ? existe : cb.not(existe));
             }
 
             return cb.and(predicados.toArray(Predicate[]::new));

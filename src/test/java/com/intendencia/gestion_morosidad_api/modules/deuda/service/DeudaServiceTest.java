@@ -39,13 +39,19 @@ class DeudaServiceTest {
     @Mock
     private ConfiguracionSegmentoService configuracionSegmentoService;
 
+    @Mock
+    private com.intendencia.gestion_morosidad_api.modules.accion_segmento.AccionSegmentoRepository accionSegmentoRepository;
+
+    @Mock
+    private com.intendencia.gestion_morosidad_api.modules.gestion.GestionRepository gestionRepository;
+
     private DeudaService deudaService;
 
     @BeforeEach
     void setUp() {
         // "Hoy" fijo: 2026-09-23
         Clock clock = Clock.fixed(Instant.parse("2026-09-23T15:00:00Z"), ZONA);
-        deudaService = new DeudaService(deudaRepository, configuracionSegmentoService, clock);
+        deudaService = new DeudaService(deudaRepository, configuracionSegmentoService, clock, accionSegmentoRepository, gestionRepository);
     }
 
     @Test

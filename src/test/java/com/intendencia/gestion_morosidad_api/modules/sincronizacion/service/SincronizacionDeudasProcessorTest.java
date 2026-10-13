@@ -186,7 +186,7 @@ class SincronizacionDeudasProcessorTest {
     }
 
     @Test
-    void cambioDePersonaSinDocumentoLimpiaDocumentoYContactosDePersonas() {
+    void cambioDeNombreSinDocumentoConservaIdentidadYNoSolicitaLimpiarContactos() {
         Contribuyente contribuyente = new Contribuyente();
         contribuyente.setNombre("Ana Pérez");
         contribuyente.setDocumento("1234567-8");
@@ -205,13 +205,75 @@ class SincronizacionDeudasProcessorTest {
                 LocalDate.of(2026, 9, 24), LocalDateTime.of(2026, 9, 24, 12, 0));
 
         assertThat(contribuyente.getNombre()).isEqualTo("Luis Gómez");
-        assertThat(contribuyente.getDocumento()).isNull();
+        assertThat(padron.getContribuyente()).isSameAs(contribuyente);
+        assertThat(contribuyente.getDocumento()).isEqualTo("1234567-8");
         @SuppressWarnings({"unchecked", "rawtypes"})
         ArgumentCaptor<List<Dato>> captor = ArgumentCaptor.forClass((Class) List.class);
         verify(sincronizacionContactosService).sincronizar(captor.capture());
-        assertThat(captor.getValue()).filteredOn(dato ->
-                dato.origen().equals(SincronizacionContactosService.PERSONAS))
-                .hasSize(2).allSatisfy(dato -> assertThat(dato.valor()).isNull());
+        assertThat(captor.getValue()).hasSize(3).allSatisfy(dato -> {
+            assertThat(dato.contribuyente()).isSameAs(contribuyente);
+            assertThat(dato.origen()).isEqualTo(SincronizacionContactosService.PENDIENTES);
+        });
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void documentoDistintoMantienePersonasSeparadasAunqueTenganElMismoNombre(boolean yaExiste) {
+        Contribuyente original = new Contribuyente();
+        original.setId(1L);
+        original.setNombre("Ana Pérez");
+        original.setDocumento("1234567-8");
+        Contribuyente otraPersona = new Contribuyente();
+        otraPersona.setId(2L);
+        otraPersona.setNombre("Ana Pérez");
+        otraPersona.setDocumento("8765432-1");
+        Padron padron = new Padron();
+        padron.setCm("123"); padron.setNumeroPadron("4567"); padron.setContribuyente(original);
+        Padron otroPadron = new Padron();
+        otroPadron.setCm("456"); otroPadron.setNumeroPadron("7890"); otroPadron.setContribuyente(original);
+        when(padronRepository.findAll()).thenReturn(List.of(padron, otroPadron));
+        when(contribuyenteRepository.findAll()).thenReturn(yaExiste ? List.of(original, otraPersona) : List.of(original));
+        when(configuracionSegmentoService.reglasVigentes()).thenReturn(new ReglasSegmentacion(List.of()));
+        GeoPagosFacturaPendienteDto pendiente = new GeoPagosFacturaPendienteDto(
+                123, 4567, null, null, "COM", null, "Ana Pérez", "8765432-1",
+                null, null, null, null, "NO", null, new BigDecimal("100.00"),
+                LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 1), "2026");
+
+        processor.procesar(List.of(pendiente), List.of(), List.of(),
+                LocalDate.of(2026, 9, 24), LocalDateTime.of(2026, 9, 24, 12, 0));
+
+        assertThat(padron.getContribuyente()).isNotSameAs(original);
+        assertThat(padron.getContribuyente().getDocumento()).isEqualTo("8765432-1");
+        if (yaExiste) assertThat(padron.getContribuyente()).isSameAs(otraPersona);
+        assertThat(original.getDocumento()).isEqualTo("1234567-8");
+        assertThat(otroPadron.getContribuyente()).isSameAs(original);
+    }
+
+    @ParameterizedTest
+    @NullSource
+    @ValueSource(strings = {"1234567-8", "8765432-1"})
+    void cobroHistoricoConservaDocumentoYSoloActualizaNombreSiNoContradiceLaIdentidad(String documentoCobro) {
+        Contribuyente contribuyente = new Contribuyente();
+        contribuyente.setNombre("Ana Pérez"); contribuyente.setDocumento("1234567-8");
+        Padron padron = new Padron();
+        padron.setCm("123"); padron.setNumeroPadron("4567"); padron.setContribuyente(contribuyente);
+        Deuda deuda = new Deuda();
+        deuda.setPadron(padron); deuda.setEstado(EstadoDeuda.PENDIENTE);
+        when(padronRepository.findAll()).thenReturn(List.of(padron));
+        when(deudaRepository.findAllConPadron()).thenReturn(List.of(deuda));
+        when(configuracionSegmentoService.reglasVigentes()).thenReturn(new ReglasSegmentacion(List.of()));
+        GeoPagosFacturaCanceladaDto cobro = new GeoPagosFacturaCanceladaDto(
+                123, 4567, "Nombre actualizado", documentoCobro, 9876,
+                LocalDate.of(2026, 9, 2), new BigDecimal("100.00"));
+
+        processor.procesar(List.of(), List.of(cobro), List.of(),
+                LocalDate.of(2026, 9, 24), LocalDateTime.of(2026, 9, 24, 12, 0));
+
+        assertThat(contribuyente.getDocumento()).isEqualTo("1234567-8");
+        assertThat(contribuyente.getNombre()).isEqualTo("8765432-1".equals(documentoCobro) ? "Ana Pérez" : "Nombre actualizado");
+        assertThat(padron.getContribuyente()).isSameAs(contribuyente);
+        assertThat(deuda.getFechaUltimoCobro()).isEqualTo(LocalDate.of(2026, 9, 2));
+        assertThat(deuda.getImporteUltimoCobro()).isEqualByComparingTo("100.00");
     }
 
     @ParameterizedTest
@@ -325,6 +387,43 @@ class SincronizacionDeudasProcessorTest {
         assertThat(resultado.deudasCreadas()).isEqualTo(1);
         assertThat(resultado.registrosOmitidos()).isZero();
         assertThat(resultado.advertencias()).singleElement().asString().contains("contribuyentes-geopagos");
+    }
+
+    @Test
+    void sincronizacionAplicaRangosPorTributoYTomaElSegmentoMasAvanzado() {
+        var a = new com.intendencia.gestion_morosidad_api.modules.tributo.entity.Tributo();
+        a.setId(1L); a.setCodigo("101");
+        var b = new com.intendencia.gestion_morosidad_api.modules.tributo.entity.Tributo();
+        b.setId(2L); b.setCodigo("201");
+        when(tributoRepository.findAll()).thenReturn(List.of(a, b));
+        var configuraciones = new java.util.ArrayList<com.intendencia.gestion_morosidad_api.modules.segmento.entity.ConfiguracionSegmento>();
+        for (int i = 0; i < 3; i++) {
+            var segmento = new com.intendencia.gestion_morosidad_api.modules.segmento.entity.SegmentoMora();
+            segmento.setId((long) i + 1); segmento.setOrden(i + 1); segmento.setNombre("Segmento " + (i + 1));
+            var base = new com.intendencia.gestion_morosidad_api.modules.segmento.entity.ConfiguracionSegmento();
+            base.setSegmento(segmento); base.setDiasDesde(new int[]{0, 91, 366}[i]);
+            base.setDiasHasta(i == 2 ? null : new int[]{90, 365}[i]);
+            configuraciones.add(base);
+            var propia = new com.intendencia.gestion_morosidad_api.modules.segmento.entity.ConfiguracionSegmento();
+            propia.setSegmento(segmento); propia.setTributo(a);
+            propia.setDiasDesde(new int[]{0, 11, 21}[i]);
+            propia.setDiasHasta(i == 2 ? null : new int[]{10, 20}[i]);
+            configuraciones.add(propia);
+        }
+        when(configuracionSegmentoService.reglasVigentes()).thenReturn(new ReglasSegmentacion(configuraciones));
+        LocalDate hoy = LocalDate.of(2026, 9, 24);
+        GeoPagosFacturaPendienteDto fila = new GeoPagosFacturaPendienteDto(
+                123, 4567, null, null, "COM", null, "Prueba rangos", "doc-test",
+                null, null, null, null, "NO", "101, 201", new BigDecimal("100.00"),
+                hoy.minusDays(100), hoy.minusDays(100), "2026");
+        processor.procesar(List.of(fila), List.of(), List.of(), hoy, hoy.atStartOfDay());
+        @SuppressWarnings({"unchecked", "rawtypes"})
+        ArgumentCaptor<Iterable<Deuda>> captor = ArgumentCaptor.forClass((Class) Iterable.class);
+        verify(deudaRepository).saveAll(captor.capture());
+        assertThat(captor.getValue()).singleElement().satisfies(deuda -> {
+            assertThat(deuda.getTributos()).hasSize(2);
+            assertThat(deuda.getSegmentoMora().getOrden()).isEqualTo(3);
+        });
     }
 
     private com.intendencia.gestion_morosidad_api.modules.sincronizacion.dto.ResultadoSincronizacion

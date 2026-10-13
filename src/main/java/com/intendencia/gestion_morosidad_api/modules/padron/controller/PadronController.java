@@ -6,12 +6,14 @@ import com.intendencia.gestion_morosidad_api.modules.padron.service.PadronServic
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 import java.util.List;
 
 @RestController
 @RequestMapping("/api/padrones")
 @RequiredArgsConstructor
+@PreAuthorize("hasAnyRole('ADMINISTRADOR', 'NOTIFICADOR', 'ANALISTA')")
 public class PadronController {
 
     private final PadronService padronService;

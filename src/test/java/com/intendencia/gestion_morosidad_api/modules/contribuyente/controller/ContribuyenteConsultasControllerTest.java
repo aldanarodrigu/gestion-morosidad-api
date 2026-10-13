@@ -29,6 +29,8 @@ import org.springframework.test.web.servlet.MockMvc;
 @WebMvcTest(ContribuyenteController.class)
 @WithMockUser
 class ContribuyenteConsultasControllerTest {
+    @MockitoBean private com.intendencia.gestion_morosidad_api.modules.deuda.service.DeudaService deudaService;
+
 
     @Autowired private MockMvc mockMvc;
     @MockitoBean private ContribuyenteService contribuyenteService;

@@ -7,9 +7,9 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface ConfiguracionSegmentoRepository extends JpaRepository<ConfiguracionSegmento, Long> {
 
-    @EntityGraph(attributePaths = "segmento")
+    @EntityGraph(attributePaths = {"segmento", "tributo"})
     List<ConfiguracionSegmento> findByActivaTrueOrderByDiasDesdeAsc();
 
-    @EntityGraph(attributePaths = "segmento")
+    @EntityGraph(attributePaths = {"segmento", "tributo"})
     List<ConfiguracionSegmento> findAllByOrderByFechaCreacionDesc();
 }

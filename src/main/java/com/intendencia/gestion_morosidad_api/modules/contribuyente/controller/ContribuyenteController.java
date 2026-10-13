@@ -16,12 +16,14 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.security.access.prepost.PreAuthorize;
 
 import java.util.List;
 
 @RestController
 @RequestMapping("/api/contribuyentes")
 @RequiredArgsConstructor
+@PreAuthorize("hasAnyRole('ADMINISTRADOR', 'NOTIFICADOR', 'ANALISTA')")
 public class ContribuyenteController {
 
     private final ContribuyenteService contribuyenteService;
@@ -61,6 +63,7 @@ public class ContribuyenteController {
     }
 
     @PutMapping("/{cm}/contactos")
+    @PreAuthorize("hasAnyRole('ADMINISTRADOR', 'NOTIFICADOR', 'ANALISTA')")
     public ContactoResponse guardarOActualizarContacto(
             @PathVariable String cm,
             @Valid @RequestBody ContactoRequest request

@@ -21,7 +21,7 @@ public class CustomUserDetailsService implements UserDetailsService {
 
         return User.withUsername(u.getUsername())
                 .password(u.getPassword())
-                .authorities("ROLE_" + u.getRol().name())
+                .authorities(u.getRoles().stream().map(rol -> "ROLE_" + rol.name()).toArray(String[]::new))
                 .disabled(!Boolean.TRUE.equals(u.getActivo()))
                 .build();
     }

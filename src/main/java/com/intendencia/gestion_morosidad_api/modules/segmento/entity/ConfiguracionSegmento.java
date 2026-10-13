@@ -1,5 +1,6 @@
 package com.intendencia.gestion_morosidad_api.modules.segmento.entity;
 
+import com.intendencia.gestion_morosidad_api.modules.tributo.entity.Tributo;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -17,7 +18,7 @@ import org.hibernate.annotations.CreationTimestamp;
 
 /**
  * Rango de días de atraso [diasDesde, diasHasta] que corresponde a un segmento.
- * Solo hay una configuración activa por segmento; las anteriores quedan como historial.
+ * Solo hay una configuración activa por segmento y tributo; null indica la base; las anteriores quedan como historial.
  */
 @Entity
 @Table(name = "configuraciones_segmento")
@@ -33,6 +34,10 @@ public class ConfiguracionSegmento {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "segmento_mora_id", nullable = false)
     private SegmentoMora segmento;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "tributo_id")
+    private Tributo tributo;
 
     @Column(name = "dias_desde", nullable = false)
     private Integer diasDesde;
