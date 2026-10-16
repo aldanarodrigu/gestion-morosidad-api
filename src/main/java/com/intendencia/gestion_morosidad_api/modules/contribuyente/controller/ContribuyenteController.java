@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.security.access.prepost.PreAuthorize;
 
 import java.util.List;
+import com.intendencia.gestion_morosidad_api.shared.enums.OrigenDatos;
 
 @RestController
 @RequestMapping("/api/contribuyentes")
@@ -41,34 +42,34 @@ public class ContribuyenteController {
 
     @GetMapping("/{cm}")
     public ResponseEntity<ContribuyenteResponse> buscarPorCm(
-            @PathVariable String cm) {
+            @PathVariable String cm, @RequestParam(defaultValue = "INTENDENCIA") OrigenDatos origen) {
 
-        return contribuyenteService.buscarPorCm(cm)
+        return (origen == OrigenDatos.INTENDENCIA ? contribuyenteService.buscarPorCm(cm) : contribuyenteService.buscarPorCm(cm, origen))
                 .map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
     @GetMapping("/{cm}/padrones")
-    public ResponseEntity<List<PadronResponse>> listarPadrones(@PathVariable String cm) {
-        return contribuyenteService.listarPadronesPorCm(cm)
+    public ResponseEntity<List<PadronResponse>> listarPadrones(@PathVariable String cm, @RequestParam(defaultValue = "INTENDENCIA") OrigenDatos origen) {
+        return (origen == OrigenDatos.INTENDENCIA ? contribuyenteService.listarPadronesPorCm(cm) : contribuyenteService.listarPadronesPorCm(cm, origen))
                 .map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
     @GetMapping("/{cm}/contactos")
     public List<ContactoResponse> listarContactos(
-            @PathVariable String cm
+            @PathVariable String cm, @RequestParam(defaultValue = "INTENDENCIA") OrigenDatos origen
     ) {
-        return contactoService.listarPorCm(cm);
+        return origen == OrigenDatos.INTENDENCIA ? contactoService.listarPorCm(cm) : contactoService.listarPorCm(cm, origen);
     }
 
     @PutMapping("/{cm}/contactos")
     @PreAuthorize("hasAnyRole('ADMINISTRADOR', 'NOTIFICADOR', 'ANALISTA')")
     public ContactoResponse guardarOActualizarContacto(
-            @PathVariable String cm,
+            @PathVariable String cm, @RequestParam(defaultValue = "INTENDENCIA") OrigenDatos origen,
             @Valid @RequestBody ContactoRequest request
     ) {
-        return contactoService.guardarOActualizar(cm, request);
+        return origen == OrigenDatos.INTENDENCIA ? contactoService.guardarOActualizar(cm, request) : contactoService.guardarOActualizar(cm, request, origen);
     }
 
     @GetMapping("/id/{contribuyenteId}/deudas")

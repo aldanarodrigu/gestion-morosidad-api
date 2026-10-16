@@ -21,6 +21,8 @@ public class SincronizacionContactosService {
     public static final String PERSONAS = "API_PERSONAS";
     public static final String GEOPAGOS = "API_GEOPAGOS";
     public static final String PENDIENTES = "API_FACTURAS_PENDIENTES";
+    public static final String GEOPAT_PERSONAS = "API_GEOPAT_PERSONAS";
+    public static final String GEOPAT_PENDIENTES = "API_GEOPAT_PENDIENTES";
 
     private static final int MAX_PARAMETROS_IN = 5_000;
 

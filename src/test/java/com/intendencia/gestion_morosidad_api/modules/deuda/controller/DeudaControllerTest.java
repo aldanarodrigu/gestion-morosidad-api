@@ -48,14 +48,24 @@ class DeudaControllerTest {
                         .param("padron", "4567")
                         .param("contribuyente", "perez")
                         .param("localidad", "Libertad")
-                        .param("segmento", "2"))
+                        .param("segmento", "2")
+                        .param("tipoPadron", "CIU"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.contenido[0].padron.cm").value("CM-1"))
                 .andExpect(jsonPath("$.contenido[0].padron.contribuyente.nombre").value("Persona de ejemplo"))
                 .andExpect(jsonPath("$.contenido[0].contribuyente.nombre").value("Persona de ejemplo"))
                 .andExpect(jsonPath("$.totalElementos").value(1));
 
-        verify(deudaService).listar(eq(new DeudaFiltro(EstadoDeuda.PENDIENTE, "4567", "perez", "Libertad", 2L, null, null)), any());
+        verify(deudaService).listar(eq(new DeudaFiltro(EstadoDeuda.PENDIENTE, "4567", "perez", "Libertad", 2L, null, null, "CIU")), any());
+    }
+
+    @Test
+    void listarTiposPadronDevuelveCatalogo() throws Exception {
+        when(deudaService.listarTiposPadron()).thenReturn(List.of("CIR", "CIU"));
+        mockMvc.perform(get("/api/deudas/tipos-padron"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0]").value("CIR"))
+                .andExpect(jsonPath("$[1]").value("CIU"));
     }
 
     @Test

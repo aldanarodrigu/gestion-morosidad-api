@@ -21,6 +21,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import com.intendencia.gestion_morosidad_api.shared.enums.OrigenDatos;
 
 @RestController
 @RequestMapping("/api")
@@ -43,8 +44,16 @@ public class DeudaController {
             @RequestParam(required = false) Long segmento,
             @RequestParam(required = false) String tributo,
             @RequestParam(required = false) Boolean conContacto,
+            @RequestParam(required = false) String tipoPadron,
+            @RequestParam(required = false) OrigenDatos origen,
             @PageableDefault(size = 20, sort = "deudaDesde", direction = Sort.Direction.ASC) Pageable pageable) {
-        return deudaService.listar(new DeudaFiltro(estado, padron, contribuyente, localidad, segmento, tributo, conContacto), pageable);
+        return deudaService.listar(new DeudaFiltro(estado, padron, contribuyente, localidad, segmento, tributo, conContacto, tipoPadron, origen), pageable);
+    }
+
+    @GetMapping("/deudas/tipos-padron")
+    @PreAuthorize("hasAnyRole('ADMINISTRADOR', 'NOTIFICADOR', 'ANALISTA')")
+    public List<String> listarTiposPadron() {
+        return deudaService.listarTiposPadron();
     }
 
     @GetMapping("/deudas/{id}")
@@ -74,8 +83,9 @@ public class DeudaController {
     @GetMapping("/contribuyentes/{cm}/deudas")
     @PreAuthorize("hasAnyRole('ADMINISTRADOR', 'NOTIFICADOR', 'ANALISTA')")
     public List<DeudaResponse> listarPorContribuyente(
-            @PathVariable String cm
+            @PathVariable String cm,
+            @RequestParam(defaultValue = "INTENDENCIA") OrigenDatos origen
     ) {
-        return deudaService.listarPorCm(cm);
+        return origen == OrigenDatos.INTENDENCIA ? deudaService.listarPorCm(cm) : deudaService.listarPorCm(cm, origen);
     }
 }

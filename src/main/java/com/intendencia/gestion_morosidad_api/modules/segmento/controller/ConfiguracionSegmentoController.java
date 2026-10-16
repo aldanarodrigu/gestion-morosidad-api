@@ -30,8 +30,14 @@ public class ConfiguracionSegmentoController {
     /** Rangos vigentes; con ?historial=true incluye los reemplazados (auditoría de cambios). */
     @GetMapping
     @PreAuthorize("hasAnyRole('ADMINISTRADOR', 'NOTIFICADOR', 'ANALISTA')")
-    public List<ConfiguracionSegmentoResponse> listar(@RequestParam(defaultValue = "false") boolean historial, @RequestParam(required = false) Long tributoId) {
-        return tributoId == null ? configuracionService.listar(historial) : configuracionService.listar(historial, tributoId);
+    public List<ConfiguracionSegmentoResponse> listar(@RequestParam(defaultValue = "false") boolean historial, @RequestParam(required = false) String tipoPadron) {
+        return tipoPadron == null ? configuracionService.listar(historial) : configuracionService.listar(historial, tipoPadron);
+    }
+
+    @GetMapping("/tipos-padron")
+    @PreAuthorize("hasAnyRole('ADMINISTRADOR', 'NOTIFICADOR', 'ANALISTA')")
+    public List<String> listarTiposPadron() {
+        return configuracionService.listarTiposPadron();
     }
 
     /** Asigna un nuevo rango a un segmento (reemplaza el vigente) y recalcula los segmentos de las deudas. */
@@ -46,11 +52,11 @@ public class ConfiguracionSegmentoController {
     public List<ConfiguracionSegmentoResponse> actualizarPeriodos(@Valid @RequestBody PeriodosMoraRequest request) {
         return configuracionService.actualizarPeriodos(request);
     }
-    @DeleteMapping("/tributo/{tributoId}")
+    @DeleteMapping("/tipo-padron/{tipoPadron}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     @PreAuthorize("hasRole('ADMINISTRADOR')")
-    public void restaurarBase(@PathVariable Long tributoId) {
-        configuracionService.restaurarBase(tributoId);
+    public void restaurarBase(@PathVariable String tipoPadron) {
+        configuracionService.restaurarBase(tipoPadron);
     }
 
 }

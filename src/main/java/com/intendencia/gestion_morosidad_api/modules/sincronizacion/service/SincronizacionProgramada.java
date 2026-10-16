@@ -6,6 +6,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
+import com.intendencia.gestion_morosidad_api.shared.enums.OrigenDatos;
 
 /**
  * Sincronización automática. Deshabilitada por defecto: se activa con
@@ -22,11 +23,13 @@ public class SincronizacionProgramada {
 
     @Scheduled(cron = "${sincronizacion.automatica.cron:0 0 3 * * *}", zone = "America/Montevideo")
     public void ejecutar() {
-        try {
-            sincronizacionDeudasService.sincronizar();
-        } catch (RuntimeException ex) {
-            // Se registra y se reintenta en la próxima ejecución programada
-            log.error("Falló la sincronización automática con GeoPagos: {}", ex.getMessage());
+        for (OrigenDatos origen : OrigenDatos.values()) {
+            try {
+                sincronizacionDeudasService.sincronizar(origen);
+            } catch (RuntimeException ex) {
+                // Cada proveedor se reintenta en la próxima ejecución, sin impedir consultar el otro.
+                log.error("Falló la sincronización automática con {}: {}", origen.proveedor(), ex.getMessage());
+            }
         }
     }
 }

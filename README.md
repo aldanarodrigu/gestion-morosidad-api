@@ -177,19 +177,20 @@ son normales; no volver esas entidades a `GenerationType.IDENTITY`.
 
 ## Modelo: padrón, CM y contribuyente
 
-- El **CM** identifica al padrón en GeoPagos y es único (`padrones.cm`).
+- El **CM** identifica al padrón dentro de cada proveedor. La clave única es `(origen, cm)`;
+  un mismo CM de GeoPagos y GeoPat puede representar padrones diferentes.
 - El **número de padrón no es único**: cada localidad numera sus padrones por separado (en los
   datos reales, 3.164 números se repiten en distintas localidades).
 - Cada deuda referencia un padrón, y cada padrón un contribuyente (`padrones.contribuyente_id`).
-  GeoPagos no tiene un identificador de persona, así que no se agrupan padrones de una misma
-  persona.
+  La sincronización vincula contribuyentes por documento cuando está disponible; sin documento
+  conserva la persona del padrón o crea una propia. No une personas solamente por su nombre.
 - `DOCUMENTO` solo viene en las facturas: puede quedar vacío si el padrón no aparece en ellas.
 
 ## Endpoints principales
 
 | Endpoint | Descripción |
 |---|---|
-| `GET /api/deudas` | Paginado. Filtros: `estado`, `padron`, `contribuyente`, `localidad`, `segmento`, `tributo`, `conContacto`. Por defecto, deudas no canceladas con importe > 0, las más antiguas primero |
+| `GET /api/deudas` | Paginado. Filtros: `estado`, `padron`, `tipoPadron`, `origen`, `contribuyente`, `localidad`, `segmento`, `tributo`, `conContacto`. Por defecto, deudas no canceladas con importe > 0, las más antiguas primero |
 | `GET /api/deudas/agrupadas` | Cartera agrupada por documento; mismos filtros y paginación por contribuyentes |
 | `GET /api/deudas/{id}`, `/api/deudas/{id}/tributos` | Detalle y tributos de una deuda |
 | `GET /api/contribuyentes` | Paginado (`page`, `size`, `sort`; por defecto por nombre). Contribuyentes con deuda vigente, un registro por padrón. Filtros opcionales `nombre` y `documento` (coincidencia parcial, sin distinguir mayúsculas; si se envían ambos deben coincidir en el mismo contribuyente) |
@@ -354,39 +355,45 @@ existentes; si la API trae un codigo eliminado, puede volver a incorporarlo al c
 `TRIBUTOS_TEST_DB_URL` y comprueba permisos, persistencia y proteccion de las deudas.
 
 
-## Configuracion de periodos de mora por tributo
+## Configuracion de periodos de mora por PadTipo
 
-Los rangos existentes son la base: Mora Temprana 0-90 dias, Mora Inicial 91-365 y Mora Tardia
-366 en adelante. Cada tributo puede tener sus propios tres rangos. Si no tiene configuracion
-propia, hereda la base. Solo Administrador puede personalizar o restaurar rangos; los otros
-roles pueden consultar.
+Los rangos base son Mora Temprana 0-90 dias, Mora Inicial 91-365 y Mora Tardia
+366 en adelante. Cada PadTipo (CIU, CIR, FAC, etc.) puede tener sus propios rangos.
+Una deuda usa los periodos del tipo de su padron, independientemente de cuantos
+tributos tenga o cuales sean. Si el tipo no tiene configuracion propia, hereda la base.
+La misma regla se aplica durante la sincronizacion y al recalcular segmentos.
 
-Una deuda puede incluir varios tributos: se calcula el segmento de cada uno con sus rangos
-propios o la base, y se usa el mas avanzado (Tardia > Inicial > Temprana). La misma regla
-se aplica durante la sincronizacion y al recalcular las deudas no canceladas.
+Solo Administrador puede personalizar o restaurar periodos. La pantalla muestra la
+base como referencia y permite editar el PadTipo seleccionado. Guardar o restaurar
+recalcula las deudas no canceladas de ese tipo; los otros tipos conservan sus rangos.
+Cambiar la base por API recalcula todas las deudas no canceladas.
 
-- `GET /api/configuraciones-segmento`: consulta la base.
-- `GET /api/configuraciones-segmento?tributoId={id}`: consulta rangos propios o hereda la base.
-- `GET /api/configuraciones-segmento?tributoId={id}&historial=true`: historial propio del tributo.
-- `PUT /api/configuraciones-segmento`: recibe `tributoId` y `rangos` con `segmentoId`,
-  `diasDesde` y `diasHasta`. Guarda todos los rangos del tributo en una transaccion.
-- `DELETE /api/configuraciones-segmento/tributo/{id}`: desactiva sus rangos propios y vuelve
-  a usar la base, conservando su historial y recalculando las deudas.
+- `GET /api/configuraciones-segmento/tipos-padron`: tipos de todos los padrones locales,
+  incluyendo tipos con configuraciones anteriores y sin deuda activa.
+- `GET /api/configuraciones-segmento`: rangos base.
+- `GET /api/configuraciones-segmento?tipoPadron=CIU`: rangos propios o heredados.
+- `GET /api/configuraciones-segmento?tipoPadron=CIU&historial=true`: historial propio.
+- `PUT /api/configuraciones-segmento`: recibe `tipoPadron` y `rangos` con
+  `segmentoId`, `diasDesde` y `diasHasta`. Guarda el conjunto en una transaccion.
+- `DELETE /api/configuraciones-segmento/tipo-padron/CIU`: vuelve a la base y conserva
+  los rangos propios como historial.
 
-Omitir `tributoId` en PUT conserva la compatibilidad con la configuracion base anterior.
-El POST individual anterior solo modifica la base. La pantalla muestra la base como
-referencia y edita los limites del tributo seleccionado.
+Los rangos deben empezar en cero, ser consecutivos, cubrir todos los segmentos una
+sola vez y dejar el ultimo sin limite superior. No se aceptan cambios invalidos ni
+PadTipo inexistentes. El antiguo `tributoId` en PUT se rechaza para evitar que un
+cliente anterior modifique accidentalmente la base. Omitir `tipoPadron` en PUT o
+usar POST individual conserva la API de configuracion base.
 
-Los rangos deben comenzar en cero, ser consecutivos y cubrir todos los segmentos una sola
-vez. El ultimo no tiene limite superior. Cambios invalidos no modifican los rangos vigentes.
-La migracion `V202610131200__periodos_por_tributo.sql` agrega la relacion opcional con
-tributos y reemplaza el indice unico por indices de base y de tributo. Conserva los rangos
-existentes como base. Se aplica al reiniciar el backend.
+La migracion `V202610161400__periodos_mora_por_padtipo.sql` agrega `tipo_padron` e
+indices unicos por tipo y segmento. Conserva la base y archiva cualquier configuracion
+anterior por tributo: no existe una correspondencia univoca para trasladarla a un tipo.
+Los registros historicos y su referencia al tributo se conservan. Al migrar, las deudas
+no canceladas se reclasifican con la base; luego se pueden personalizar los PadTipo.
 
-Los tributos con historial de configuracion no se eliminan para conservar ese historial.
-`PeriodosMoraPersistenciaTest` requiere una base desechable en `PERIODOS_TEST_DB_URL`.
-Verifica aislamiento por tributo, herencia, historial, restauracion, permisos y clasificacion
-con varios tributos. Tambien se verifica la regla en `SincronizacionDeudasProcessorTest`.
+`PeriodosMoraPersistenciaTest` usa exclusivamente PostgreSQL desechable mediante
+`PERIODOS_TEST_DB_URL`. Verifica aislamiento por PadTipo, herencia, historial,
+restauracion, permisos y deudas del mismo tipo con diferentes combinaciones de tributos.
+`SincronizacionDeudasProcessorTest` verifica la misma asignacion al importar datos.
 
 ## Permisos actuales
 
@@ -466,3 +473,47 @@ No se cambia el esquema ni se requiere una migración.
 
 Las pruebas de `CarteraAgrupadaPersistenciaTest` cubren ambos modos, tipos de contacto,
 contactos de terceros, valores vacíos, paginación, sumas y un contacto recién registrado.
+
+## Integracion GeoPat (origen SUCIVE)
+
+La cartera comparte la pantalla para los dos proveedores. El origen viene de `padron.origen`:
+`INTENDENCIA` para GeoPagos y `SUCIVE` para GeoPat. El filtro `origen` se aplica en SQL en
+la cartera individual y agrupada, incluyendo sus totales y paginacion.
+
+- `POST /api/sincronizaciones/deudas`: conserva la sincronizacion de GeoPagos.
+- `POST /api/sincronizaciones/deudas?origen=SUCIVE`: sincroniza GeoPat (Administrador).
+- `GET /api/deudas?origen=SUCIVE` y `GET /api/deudas/agrupadas?origen=SUCIVE`: cartera GeoPat.
+- Las consultas por CM de contribuyentes, contactos y deudas aceptan `?origen=SUCIVE`;
+  omitirlo conserva Intendencia. Las consultas por ID interno son univocas entre origenes.
+
+GeoPat utiliza la misma URL base y Basic Auth, con las rutas `/api/v1/utec/geopat/contribuyentes`,
+`/api/v1/utec/geopat/facturas/pendientes` y `/api/v1/utec/geopat/facturas/canceladas` del anexo.
+Los DTO de facturas se comparten porque los campos y formatos documentados coinciden;
+el cliente GeoPat normaliza contribuyentes sin inventar los campos de transacciones GeoPagos.
+
+La migracion `V202610161800__origen_geopat.sql` conserva los registros existentes como
+Intendencia. Los padrones son unicos por `(origen, cm)` y los tributos por `(origen, codigo)`:
+no se presume que identificadores iguales de bases distintas representen lo mismo. Los
+contribuyentes con el mismo documento pueden compartir persona; los contactos importados
+conservan fuentes separadas (`API_GEOPAT_PERSONAS`, `API_GEOPAT_PENDIENTES`).
+
+Cada sincronizacion obtiene su propio intervalo de cobros y solo actualiza o cancela deudas
+de ese origen. Una respuesta invalida o un fallo en pendientes/canceladas no escribe cambios.
+La proteccion contra pendientes vacias tambien se limita al origen consultado. Solo se crean
+padrones con deuda vencida positiva; nombres, documentos y contactos nulos son admisibles.
+Los periodos de mora siguen dependiendo del PadTipo del padron, con herencia de rangos base.
+
+Si la sincronizacion automatica esta habilitada, ejecuta ambos proveedores de forma independiente:
+el fallo de uno no impide intentar el otro. El bloqueo de ejecuciones simultaneas sigue siendo
+por instancia del backend. La consulta opcional de contribuyentes puede fallar sin perder las
+facturas validas; sus contactos se completan en otra sincronizacion.
+
+Pendiente de validar con clientes: gestion especifica de CNV/convenios. El anexo advierte que
+la deuda de un convenio puede aparecer en su padron y en los padrones vinculados; no permite
+deducir esas relaciones para corregir un total general. Se conservan los importes y codigos
+informados, sin excluir CNV ni aplicar deduplicaciones supuestas.
+
+`GeoPatClientTest` verifica las rutas, fechas y formatos del anexo sin red. `GeoPatPersistenciaTest`
+usa exclusivamente PostgreSQL desechable indicado por `GEOPAT_TEST_DB_URL`; prueba CM y
+tributos repetidos entre origenes, cancelaciones independientes, datos personales nulos,
+filtros, contactos, agrupacion y el endpoint de sincronizacion.

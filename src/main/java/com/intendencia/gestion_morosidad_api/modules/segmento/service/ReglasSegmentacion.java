@@ -2,21 +2,21 @@ package com.intendencia.gestion_morosidad_api.modules.segmento.service;
 
 import com.intendencia.gestion_morosidad_api.modules.segmento.entity.ConfiguracionSegmento;
 import com.intendencia.gestion_morosidad_api.modules.segmento.entity.SegmentoMora;
-import com.intendencia.gestion_morosidad_api.modules.tributo.entity.Tributo;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
 
-/** Rangos vigentes precargados: cada tributo usa sus rangos propios o la base. */
+/** Rangos vigentes precargados: cada padrón usa los rangos de su PadTipo o la base. */
 public final class ReglasSegmentacion {
     private final List<ConfiguracionSegmento> base;
-    private final Map<Long, List<ConfiguracionSegmento>> porTributo = new HashMap<>();
+    private final Map<String, List<ConfiguracionSegmento>> porTipoPadron = new HashMap<>();
 
     public ReglasSegmentacion(List<ConfiguracionSegmento> configuracionesActivas) {
-        base = configuracionesActivas.stream().filter(c -> c.getTributo() == null).toList();
+        base = configuracionesActivas.stream()
+                .filter(c -> c.getTributo() == null && c.getTipoPadron() == null).toList();
         for (var configuracion : configuracionesActivas) {
-            if (configuracion.getTributo() != null)
-                porTributo.computeIfAbsent(configuracion.getTributo().getId(), k -> new ArrayList<>()).add(configuracion);
+            if (configuracion.getTributo() == null && configuracion.getTipoPadron() != null)
+                porTipoPadron.computeIfAbsent(configuracion.getTipoPadron(), k -> new ArrayList<>()).add(configuracion);
         }
     }
 
@@ -24,14 +24,9 @@ public final class ReglasSegmentacion {
         return buscar(base, deudaDesde, hoy);
     }
 
-    /** Una deuda con varios tributos toma el segmento mas avanzado por orden. */
-    public SegmentoMora segmentoPara(LocalDate deudaDesde, LocalDate hoy, Collection<Tributo> tributos) {
-        if (tributos == null || tributos.isEmpty()) return segmentoPara(deudaDesde, hoy);
-        return tributos.stream()
-                .map(t -> buscar(porTributo.getOrDefault(t.getId(), base), deudaDesde, hoy))
-                .filter(Objects::nonNull)
-                .max(Comparator.comparing(SegmentoMora::getOrden, Comparator.nullsFirst(Comparator.naturalOrder())))
-                .orElse(null);
+    /** Los tributos concretos de la deuda no cambian la configuración del PadTipo. */
+    public SegmentoMora segmentoPara(LocalDate deudaDesde, LocalDate hoy, String tipoPadron) {
+        return buscar(tipoPadron == null ? base : porTipoPadron.getOrDefault(tipoPadron.trim(), base), deudaDesde, hoy);
     }
 
     private static SegmentoMora buscar(List<ConfiguracionSegmento> rangos, LocalDate desde, LocalDate hoy) {

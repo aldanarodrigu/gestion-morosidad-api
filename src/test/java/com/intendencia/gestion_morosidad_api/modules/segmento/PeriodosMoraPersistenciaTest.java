@@ -58,9 +58,12 @@ class PeriodosMoraPersistenciaTest {
                         finInicial, s.get(2).getId(), finInicial + 1);
     }
     Long deuda(int dias, EstadoDeuda estado) {
+        return deuda(dias, estado, null);
+    }
+    Long deuda(int dias, EstadoDeuda estado, String tipoPadron) {
         var s = segmentos.findAllByOrderByOrdenAsc();
         Contribuyente c = new Contribuyente(); c.setNombre("Prueba periodos"); contribuyentes.saveAndFlush(c);
-        Padron p = new Padron(); p.setCm("periodos-" + dias); p.setNumeroPadron("periodos-" + dias); p.setContribuyente(c); padrones.saveAndFlush(p);
+        Padron p = new Padron(); p.setCm("periodos-" + dias); p.setNumeroPadron("periodos-" + dias); p.setContribuyente(c); p.setTipoPadron(tipoPadron); padrones.saveAndFlush(p);
         Deuda d = new Deuda(); d.setPadron(p); d.setImporte(BigDecimal.TEN);
         d.setDeudaDesde(LocalDate.now(clock).minusDays(dias)); d.setEstado(estado);
         d.setSegmentoMora(s.get(dias > 365 ? 2 : dias > 90 ? 1 : 0));
@@ -115,66 +118,78 @@ class PeriodosMoraPersistenciaTest {
         var t = new com.intendencia.gestion_morosidad_api.modules.tributo.entity.Tributo();
         t.setCodigo(codigo); return tributos.saveAndFlush(t);
     }
-    void guardarTributo(Long id, int temprana, int inicial) throws Exception {
-        String contenido = cuerpo(temprana, inicial).replace("{\"rangos\"", "{\"tributoId\":" + id + ",\"rangos\"");
+    void guardarPadTipo(String tipo, int temprana, int inicial) throws Exception {
+        String contenido = cuerpo(temprana, inicial).replace("{\"rangos\"", "{\"tipoPadron\":\"" + tipo + "\",\"rangos\"");
         mvc.perform(put("/api/configuraciones-segmento").with(user("admin").roles("ADMINISTRADOR"))
                         .contentType(MediaType.APPLICATION_JSON).content(contenido))
-                .andExpect(status().isOk()).andExpect(jsonPath("$[0].tributoId").value(id));
+                .andExpect(status().isOk()).andExpect(jsonPath("$[0].tipoPadron").value(tipo));
     }
-    @Test void rangosPorTributoNoModificanLaBaseNiOtrosTributos() throws Exception {
-        var a = tributo("tributo-a"); var b = tributo("tributo-b");
-        mvc.perform(get("/api/configuraciones-segmento").param("tributoId", a.getId().toString())
+    @Test void rangosPorPadTipoNoModificanLaBaseNiOtrosTipos() throws Exception {
+        deuda(110, EstadoDeuda.PENDIENTE, "CIU");
+        deuda(111, EstadoDeuda.PENDIENTE, "CIR");
+        mvc.perform(get("/api/configuraciones-segmento").param("tipoPadron", "CIU")
                         .with(user("analista").roles("ANALISTA")))
                 .andExpect(status().isOk()).andExpect(jsonPath("$[0].diasHasta").value(90))
-                .andExpect(jsonPath("$[0].tributoId").isEmpty());
-        guardarTributo(a.getId(), 10, 20);
-        guardarTributo(b.getId(), 150, 500);
+                .andExpect(jsonPath("$[0].tipoPadron").isEmpty());
+        guardarPadTipo("CIU", 10, 20);
+        guardarPadTipo("CIR", 150, 500);
         mvc.perform(get("/api/configuraciones-segmento").with(user("analista").roles("ANALISTA")))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(3))
                 .andExpect(jsonPath("$[0].diasHasta").value(90));
-        mvc.perform(get("/api/configuraciones-segmento").param("tributoId", a.getId().toString())
+        mvc.perform(get("/api/configuraciones-segmento").param("tipoPadron", "CIU")
                         .with(user("analista").roles("ANALISTA")))
                 .andExpect(status().isOk()).andExpect(jsonPath("$[0].diasHasta").value(10));
-        mvc.perform(get("/api/configuraciones-segmento").param("tributoId", b.getId().toString())
+        mvc.perform(get("/api/configuraciones-segmento").param("tipoPadron", "CIR")
                         .with(user("analista").roles("ANALISTA")))
                 .andExpect(status().isOk()).andExpect(jsonPath("$[0].diasHasta").value(150));
     }
-    @Test void deudaConVariosTributosTomaElMasAvanzadoYRestaurarBaseReclasifica() throws Exception {
-        var a = tributo("tributo-a"); var b = tributo("tributo-b"); var c = tributo("tributo-c");
-        Long mixta = deuda(110, EstadoDeuda.PENDIENTE);
-        Long suave = deuda(111, EstadoDeuda.PENDIENTE);
-        Long heredada = deuda(112, EstadoDeuda.PENDIENTE);
+    @Test void mismoPadTipoComparteReglasAunqueFaltenTributosYRestaurarBaseReclasifica() throws Exception {
+        var a = tributo("tributo-a"); var b = tributo("tributo-b");
+        Long mixta = deuda(110, EstadoDeuda.PENDIENTE, "CIU");
+        Long parcial = deuda(111, EstadoDeuda.EN_GESTION, "CIU");
+        Long otroTipo = deuda(112, EstadoDeuda.PENDIENTE, "CIR");
+        Long sinTributos = deuda(113, EstadoDeuda.PENDIENTE, "CIU");
+        Long cancelada = deuda(114, EstadoDeuda.CANCELADA, "CIU");
         deudas.findById(mixta).orElseThrow().setTributos(new java.util.HashSet<>(java.util.List.of(a, b)));
-        deudas.findById(suave).orElseThrow().setTributos(new java.util.HashSet<>(java.util.List.of(b)));
-        deudas.findById(heredada).orElseThrow().setTributos(new java.util.HashSet<>(java.util.List.of(b, c)));
+        deudas.findById(parcial).orElseThrow().setTributos(new java.util.HashSet<>(java.util.List.of(b)));
+        deudas.findById(otroTipo).orElseThrow().setTributos(new java.util.HashSet<>(java.util.List.of(a, b)));
         deudas.flush();
-        guardarTributo(a.getId(), 10, 20);
-        guardarTributo(b.getId(), 150, 500);
+        guardarPadTipo("CIU", 10, 20);
         em.flush(); em.clear();
         var s = segmentos.findAllByOrderByOrdenAsc();
-        assertThat(deudas.findById(mixta).orElseThrow().getSegmentoMora().getId()).isEqualTo(s.get(2).getId());
-        assertThat(deudas.findById(suave).orElseThrow().getSegmentoMora().getId()).isEqualTo(s.get(0).getId());
-        assertThat(deudas.findById(heredada).orElseThrow().getSegmentoMora().getId()).isEqualTo(s.get(1).getId());
-        mvc.perform(delete("/api/configuraciones-segmento/tributo/" + a.getId()).with(user("admin").roles("ADMINISTRADOR")))
+        for (Long id : java.util.List.of(mixta, parcial, sinTributos))
+            assertThat(deudas.findById(id).orElseThrow().getSegmentoMora().getId()).isEqualTo(s.get(2).getId());
+        assertThat(deudas.findById(otroTipo).orElseThrow().getSegmentoMora().getId()).isEqualTo(s.get(1).getId());
+        assertThat(deudas.findById(cancelada).orElseThrow().getSegmentoMora().getId()).isEqualTo(s.get(1).getId());
+        mvc.perform(delete("/api/configuraciones-segmento/tipo-padron/CIU").with(user("admin").roles("ADMINISTRADOR")))
                 .andExpect(status().isNoContent());
         em.flush(); em.clear();
-        assertThat(deudas.findById(mixta).orElseThrow().getSegmentoMora().getId()).isEqualTo(s.get(1).getId());
-        mvc.perform(get("/api/configuraciones-segmento").param("tributoId", a.getId().toString()).param("historial", "true")
+        for (Long id : java.util.List.of(mixta, parcial, sinTributos))
+            assertThat(deudas.findById(id).orElseThrow().getSegmentoMora().getId()).isEqualTo(s.get(1).getId());
+        mvc.perform(get("/api/configuraciones-segmento").param("tipoPadron", "CIU").param("historial", "true")
                         .with(user("admin").roles("ADMINISTRADOR")))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(3))
                 .andExpect(jsonPath("$[0].activa").value(false));
     }
-    @Test void configuracionInvalidaDeTributoNoModificaLaBaseYProtegeHistorial() throws Exception {
-        var a = tributo("tributo-a");
-        String invalida = cuerpo(120, 100).replace("{\"rangos\"", "{\"tributoId\":" + a.getId() + ",\"rangos\"");
+    @Test void rechazaTributoIdAntiguoYPadTipoInvalidoSinModificarLaBase() throws Exception {
+        deuda(110, EstadoDeuda.PENDIENTE, "CIU");
         long antes = rangos.count();
+        String antiguo = cuerpo(120, 450).replace("{\"rangos\"", "{\"tributoId\":101,\"rangos\"");
         mvc.perform(put("/api/configuraciones-segmento").with(user("admin").roles("ADMINISTRADOR"))
-                        .contentType(MediaType.APPLICATION_JSON).content(invalida)).andExpect(status().isBadRequest());
+                        .contentType(MediaType.APPLICATION_JSON).content(antiguo)).andExpect(status().isBadRequest());
+        for (String tipo : java.util.List.of("", "NO_EXISTE")) {
+            String contenido = cuerpo(120, 450).replace("{\"rangos\"", "{\"tipoPadron\":\"" + tipo + "\",\"rangos\"");
+            mvc.perform(put("/api/configuraciones-segmento").with(user("admin").roles("ADMINISTRADOR"))
+                            .contentType(MediaType.APPLICATION_JSON).content(contenido))
+                    .andExpect(status().is(tipo.isEmpty() ? 400 : 404));
+        }
         assertThat(rangos.count()).isEqualTo(antes);
-        guardarTributo(a.getId(), 10, 20);
-        mvc.perform(delete("/api/tributos/" + a.getId()).with(user("admin").roles("ADMINISTRADOR")))
-                .andExpect(status().isBadRequest());
-        assertThat(tributos.existsById(a.getId())).isTrue();
+        assertThat(rangos.findByActivaTrueOrderByDiasDesdeAsc()).extracting(c -> c.getDiasDesde()).containsExactly(0, 91, 366);
     }
-
+    @Test void catalogoIncluyeTiposSinDeudasActivas() throws Exception {
+        deuda(110, EstadoDeuda.CANCELADA, "CIU");
+        deuda(111, EstadoDeuda.PENDIENTE, "CIR");
+        mvc.perform(get("/api/configuraciones-segmento/tipos-padron").with(user("analista").roles("ANALISTA")))
+                .andExpect(status().isOk()).andExpect(jsonPath("$", org.hamcrest.Matchers.contains("CIR", "CIU")));
+    }
 }

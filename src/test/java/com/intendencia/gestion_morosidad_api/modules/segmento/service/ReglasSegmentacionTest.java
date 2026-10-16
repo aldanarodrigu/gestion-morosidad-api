@@ -58,4 +58,27 @@ class ReglasSegmentacionTest {
         configuracion.setDiasHasta(hasta);
         return configuracion;
     }
+
+    @Test
+    void rangosPorPadTipoNoContaminanLaBaseNiOtrosTipos() {
+        var base = configuracion("Base", 0, null);
+        var ciu = configuracion("CIU propio", 0, 120);
+        ciu.setTipoPadron("CIU");
+        var ciuTardia = configuracion("CIU tardía", 121, null);
+        ciuTardia.setTipoPadron("CIU");
+        var reglas = new ReglasSegmentacion(List.of(base, ciu, ciuTardia));
+        assertThat(reglas.segmentoPara(HOY.minusDays(120), HOY, "CIU").getNombre()).isEqualTo("CIU propio");
+        assertThat(reglas.segmentoPara(HOY.minusDays(121), HOY, " CIU ").getNombre()).isEqualTo("CIU tardía");
+        assertThat(reglas.segmentoPara(HOY.minusDays(121), HOY, "CIR").getNombre()).isEqualTo("Base");
+        assertThat(reglas.segmentoPara(HOY.minusDays(121), HOY, null).getNombre()).isEqualTo("Base");
+    }
+
+    @Test
+    void ignoraConfiguracionesHistoricasPorTributo() {
+        var antigua = configuracion("Antigua", 0, null);
+        antigua.setTributo(new com.intendencia.gestion_morosidad_api.modules.tributo.entity.Tributo());
+        var base = configuracion("Base", 0, null);
+        var reglas = new ReglasSegmentacion(List.of(antigua, base));
+        assertThat(reglas.segmentoPara(HOY.minusDays(100), HOY, "CIU").getNombre()).isEqualTo("Base");
+    }
 }

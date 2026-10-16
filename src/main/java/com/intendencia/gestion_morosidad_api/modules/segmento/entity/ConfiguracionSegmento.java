@@ -18,7 +18,7 @@ import org.hibernate.annotations.CreationTimestamp;
 
 /**
  * Rango de días de atraso [diasDesde, diasHasta] que corresponde a un segmento.
- * Solo hay una configuración activa por segmento y tributo; null indica la base; las anteriores quedan como historial.
+ * Solo hay una configuración activa por segmento y PadTipo; null indica la base.
  */
 @Entity
 @Table(name = "configuraciones_segmento")
@@ -35,9 +35,13 @@ public class ConfiguracionSegmento {
     @JoinColumn(name = "segmento_mora_id", nullable = false)
     private SegmentoMora segmento;
 
+    /** Referencia conservada solo para el historial anterior a PadTipo. */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "tributo_id")
     private Tributo tributo;
+
+    @Column(name = "tipo_padron", length = 100)
+    private String tipoPadron;
 
     @Column(name = "dias_desde", nullable = false)
     private Integer diasDesde;

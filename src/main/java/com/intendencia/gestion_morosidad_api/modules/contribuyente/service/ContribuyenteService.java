@@ -11,10 +11,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import com.intendencia.gestion_morosidad_api.shared.enums.OrigenDatos;
 import java.util.Optional;
 
 /**
- * Consultas de contribuyentes. Solo lee la base: los datos se cargan desde GeoPagos en la
+ * Consultas de contribuyentes. Solo lee la base: los datos se cargan desde GeoPagos o GeoPat en la
  * sincronización (POST /api/sincronizaciones/deudas), nunca durante una consulta.
  */
 @Service
@@ -33,6 +34,15 @@ public class ContribuyenteService {
 
     public Optional<ContribuyenteResponse> buscarPorCm(String cm) {
         return padronRepository.findByCm(cm).map(ContribuyenteResponse::de);
+    }
+
+    public Optional<ContribuyenteResponse> buscarPorCm(String cm, OrigenDatos origen) {
+        return padronRepository.findByCmAndOrigen(cm, origen).map(ContribuyenteResponse::de);
+    }
+
+    public Optional<List<PadronResponse>> listarPadronesPorCm(String cm, OrigenDatos origen) {
+        return padronRepository.findByCmAndOrigen(cm, origen).map(p -> padronRepository
+                .findByContribuyenteOrderByNumeroPadronAsc(p.getContribuyente()).stream().map(PadronResponse::de).toList());
     }
 
     /** Todos los padrones del contribuyente vinculado al CM. */

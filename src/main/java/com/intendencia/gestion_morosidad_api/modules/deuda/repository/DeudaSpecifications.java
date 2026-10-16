@@ -38,6 +38,12 @@ public final class DeudaSpecifications {
                 predicados.add(cb.greaterThan(root.get("importe"), BigDecimal.ZERO));
             }
             Path<Padron> padron = root.get("padron");
+            if (filtro.origen() != null) {
+                predicados.add(cb.equal(padron.get("origen"), filtro.origen()));
+            }
+            if (tieneTexto(filtro.tipoPadron())) {
+                predicados.add(cb.equal(cb.trim(padron.<String>get("tipoPadron")), filtro.tipoPadron().trim()));
+            }
             if (tieneTexto(filtro.padron())) {
                 predicados.add(cb.equal(padron.get("numeroPadron"), filtro.padron().trim()));
             }

@@ -2,12 +2,13 @@ package com.intendencia.gestion_morosidad_api.modules.padron.entity;
 
 import com.intendencia.gestion_morosidad_api.modules.contribuyente.entity.Contribuyente;
 import jakarta.persistence.*;
+import com.intendencia.gestion_morosidad_api.shared.enums.OrigenDatos;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 @Entity
-@Table(name = "padrones")
+@Table(name = "padrones", uniqueConstraints = @UniqueConstraint(name = "uk_padron_origen_cm", columnNames = {"origen", "cm"}))
 @Getter
 @Setter
 @NoArgsConstructor
@@ -19,8 +20,12 @@ public class Padron {
     @SequenceGenerator(name = "padrones_seq", sequenceName = "padrones_id_seq", allocationSize = 1000)
     private Long id;
 
-    @Column(nullable = false, unique = true)
+    @Column(nullable = false)
     private String cm;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private OrigenDatos origen = OrigenDatos.INTENDENCIA;
 
     /** No es único: cada localidad numera sus padrones por separado. El identificador es el CM. */
     @Column(name = "numero_padron", nullable = false)

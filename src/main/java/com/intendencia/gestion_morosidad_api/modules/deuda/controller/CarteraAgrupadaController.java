@@ -9,6 +9,7 @@ import org.springframework.data.domain.*;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import com.intendencia.gestion_morosidad_api.shared.enums.OrigenDatos;
 
 @RestController
 @RequestMapping("/api/deudas/agrupadas")
@@ -26,7 +27,9 @@ public class CarteraAgrupadaController {
             @RequestParam(required = false) Long segmento,
             @RequestParam(required = false) String tributo,
             @RequestParam(required = false) Boolean conContacto,
+            @RequestParam(required = false) String tipoPadron,
+            @RequestParam(required = false) OrigenDatos origen,
             @PageableDefault(size = 20, sort = "deudaDesde", direction = Sort.Direction.ASC) Pageable pageable) {
-        return service.listar(new DeudaFiltro(estado, padron, contribuyente, localidad, segmento, tributo, conContacto), pageable);
+        return service.listar(new DeudaFiltro(estado, padron, contribuyente, localidad, segmento, tributo, conContacto, tipoPadron, origen), pageable);
     }
 }

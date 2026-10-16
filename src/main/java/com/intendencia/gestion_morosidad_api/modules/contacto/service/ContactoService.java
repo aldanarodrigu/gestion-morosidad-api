@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import com.intendencia.gestion_morosidad_api.shared.enums.OrigenDatos;
 
 @Service
 @RequiredArgsConstructor
@@ -23,8 +24,13 @@ public class ContactoService {
 
     @Transactional(readOnly = true)
     public List<ContactoResponse> listarPorCm(String cm) {
+        return listarPorCm(cm, OrigenDatos.INTENDENCIA);
+    }
 
-        Contribuyente contribuyente = obtenerContribuyentePorCm(cm);
+    @Transactional(readOnly = true)
+    public List<ContactoResponse> listarPorCm(String cm, OrigenDatos origen) {
+
+        Contribuyente contribuyente = obtenerContribuyentePorCm(cm, origen);
 
         return contactoRepository.findByContribuyente(contribuyente)
                 .stream()
@@ -37,8 +43,13 @@ public class ContactoService {
             String cm,
             ContactoRequest request
     ) {
+        return guardarOActualizar(cm, request, OrigenDatos.INTENDENCIA);
+    }
 
-        Contribuyente contribuyente = obtenerContribuyentePorCm(cm);
+    @Transactional
+    public ContactoResponse guardarOActualizar(String cm, ContactoRequest request, OrigenDatos origen) {
+
+        Contribuyente contribuyente = obtenerContribuyentePorCm(cm, origen);
 
         Contacto contacto;
 
@@ -67,10 +78,9 @@ public class ContactoService {
         return convertirAResponse(contacto);
     }
 
-    private Contribuyente obtenerContribuyentePorCm(String cm) {
+    private Contribuyente obtenerContribuyentePorCm(String cm, OrigenDatos origen) {
 
-        Padron padron = padronRepository
-                .findByCm(cm)
+        Padron padron = (origen == OrigenDatos.INTENDENCIA ? padronRepository.findByCm(cm) : padronRepository.findByCmAndOrigen(cm, origen))
                 .orElseThrow(() -> new RecursoNoEncontradoException(
                         "No existe un padrón con el CM indicado"));
 

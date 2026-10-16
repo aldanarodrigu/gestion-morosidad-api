@@ -10,8 +10,7 @@ import com.intendencia.gestion_morosidad_api.shared.exception.RecursoNoEncontrad
 import com.intendencia.gestion_morosidad_api.shared.exception.ReglaNegocioException;
 import java.util.List;
 import java.util.Objects;
-import com.intendencia.gestion_morosidad_api.modules.tributo.repository.TributoRepository;
-import com.intendencia.gestion_morosidad_api.modules.tributo.entity.Tributo;
+import com.intendencia.gestion_morosidad_api.modules.padron.repository.PadronRepository;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.stream.Collectors;
@@ -31,25 +30,41 @@ public class ConfiguracionSegmentoService {
     private final ConfiguracionSegmentoRepository configuracionRepository;
     private final SegmentoMoraRepository segmentoMoraRepository;
     private final ApplicationEventPublisher eventPublisher;
-    private final TributoRepository tributoRepository;
+    private final PadronRepository padronRepository;
+
+    public List<String> listarTiposPadron() {
+        var tipos = new java.util.TreeSet<>(padronRepository.listarTiposPadron());
+        configuracionRepository.findAllByOrderByFechaCreacionDesc().stream()
+                .map(ConfiguracionSegmento::getTipoPadron).filter(Objects::nonNull).forEach(tipos::add);
+        return List.copyOf(tipos);
+    }
 
     public List<ConfiguracionSegmentoResponse> listar(boolean historial) {
         return listar(historial, null);
     }
 
-    public List<ConfiguracionSegmentoResponse> listar(boolean historial, Long tributoId) {
-        if (tributoId != null && !tributoRepository.existsById(tributoId))
-            throw new RecursoNoEncontradoException("No existe el tributo con id " + tributoId);
+    public List<ConfiguracionSegmentoResponse> listar(boolean historial, String tipoPadron) {
+        String tipo = validarTipoPadron(tipoPadron);
         var todas = historial ? configuracionRepository.findAllByOrderByFechaCreacionDesc()
                 : configuracionRepository.findByActivaTrueOrderByDiasDesdeAsc();
-        var propias = todas.stream().filter(c -> esDelTributo(c, tributoId)).toList();
-        if (!historial && tributoId != null && propias.isEmpty())
-            propias = todas.stream().filter(c -> c.getTributo() == null).toList();
+        var propias = todas.stream().filter(c -> esDelTipo(c, tipo)).toList();
+        if (!historial && tipo != null && propias.isEmpty())
+            propias = todas.stream().filter(c -> esDelTipo(c, null)).toList();
         return propias.stream().map(ConfiguracionSegmentoResponse::de).toList();
     }
 
-    private static boolean esDelTributo(ConfiguracionSegmento c, Long tributoId) {
-        return Objects.equals(c.getTributo() == null ? null : c.getTributo().getId(), tributoId);
+    private static boolean esDelTipo(ConfiguracionSegmento c, String tipoPadron) {
+        return c.getTributo() == null && Objects.equals(c.getTipoPadron(), tipoPadron);
+    }
+
+    private String validarTipoPadron(String tipoPadron) {
+        if (tipoPadron == null) return null;
+        String tipo = tipoPadron.trim();
+        if (tipo.isEmpty() || tipo.length() > 100)
+            throw new ReglaNegocioException("Debe indicarse un PadTipo válido.");
+        if (!listarTiposPadron().contains(tipo))
+            throw new RecursoNoEncontradoException("No existe el PadTipo " + tipo);
+        return tipo;
     }
 
     public ReglasSegmentacion reglasVigentes() {
@@ -77,7 +92,7 @@ public class ConfiguracionSegmentoService {
         }
 
         List<ConfiguracionSegmento> activas = configuracionRepository.findByActivaTrueOrderByDiasDesdeAsc()
-                .stream().filter(c -> c.getTributo() == null).toList();
+                .stream().filter(c -> esDelTipo(c, null)).toList();
         for (ConfiguracionSegmento activa : activas) {
             boolean esDelMismoSegmento = activa.getSegmento().getId().equals(segmento.getId());
             if (!esDelMismoSegmento && nueva.seSuperponeCon(activa)) {
@@ -105,8 +120,7 @@ public class ConfiguracionSegmentoService {
     /** Reemplaza todos los rangos de forma atomica, sin huecos ni solapamientos. */
     @Transactional
     public List<ConfiguracionSegmentoResponse> actualizarPeriodos(PeriodosMoraRequest request) {
-        Tributo tributo = request.tributoId() == null ? null : tributoRepository.findById(request.tributoId())
-                .orElseThrow(() -> new RecursoNoEncontradoException("No existe el tributo con id " + request.tributoId()));
+        String tipoPadron = validarTipoPadron(request.tipoPadron());
         var segmentos = segmentoMoraRepository.findAllByOrderByOrdenAsc();
         var porId = segmentos.stream().collect(Collectors.toMap(SegmentoMora::getId, s -> s));
         var recibidos = new HashSet<Long>();
@@ -134,32 +148,32 @@ public class ConfiguracionSegmentoService {
                 throw new ReglaNegocioException("El limite superior no puede ser menor al inicio del periodo.");
             var nueva = new ConfiguracionSegmento();
             nueva.setSegmento(segmento);
-            nueva.setTributo(tributo);
+            nueva.setTipoPadron(tipoPadron);
             nueva.setDiasDesde(rango.diasDesde());
             nueva.setDiasHasta(rango.diasHasta());
             nuevas.add(nueva);
             if (!ultimo) siguiente = (long) rango.diasHasta() + 1;
         }
         var activas = configuracionRepository.findByActivaTrueOrderByDiasDesdeAsc()
-                .stream().filter(c -> esDelTributo(c, request.tributoId())).toList();
+                .stream().filter(c -> esDelTipo(c, tipoPadron)).toList();
         activas.forEach(c -> c.setActiva(false));
         configuracionRepository.saveAll(activas);
         configuracionRepository.flush();
         var guardadas = configuracionRepository.saveAllAndFlush(nuevas);
-        eventPublisher.publishEvent(new ConfiguracionSegmentoCambiadaEvent());
+        eventPublisher.publishEvent(new ConfiguracionSegmentoCambiadaEvent(tipoPadron));
         return guardadas.stream().map(ConfiguracionSegmentoResponse::de).toList();
     }
 
     @Transactional
-    public void restaurarBase(Long tributoId) {
-        if (!tributoRepository.existsById(tributoId))
-            throw new RecursoNoEncontradoException("No existe el tributo con id " + tributoId);
+    public void restaurarBase(String tipoPadron) {
+        String tipo = validarTipoPadron(tipoPadron);
+        if (tipo == null) throw new ReglaNegocioException("Debe indicarse un PadTipo.");
         var propias = configuracionRepository.findByActivaTrueOrderByDiasDesdeAsc().stream()
-                .filter(c -> esDelTributo(c, tributoId)).toList();
+                .filter(c -> esDelTipo(c, tipo)).toList();
         if (propias.isEmpty()) return;
         propias.forEach(c -> c.setActiva(false));
         configuracionRepository.saveAllAndFlush(propias);
-        eventPublisher.publishEvent(new ConfiguracionSegmentoCambiadaEvent());
+        eventPublisher.publishEvent(new ConfiguracionSegmentoCambiadaEvent(tipo));
     }
 
     private static String describir(ConfiguracionSegmento configuracion) {

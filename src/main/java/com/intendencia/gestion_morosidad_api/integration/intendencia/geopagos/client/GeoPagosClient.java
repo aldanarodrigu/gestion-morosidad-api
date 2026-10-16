@@ -13,7 +13,7 @@ import org.springframework.web.client.RestClient;
 
 @Component
 @RequiredArgsConstructor
-public class GeoPagosClient {
+public class GeoPagosClient implements com.intendencia.gestion_morosidad_api.integration.intendencia.common.IntendenciaClient {
 
     private final RestClient intendenciaRestClient;
 

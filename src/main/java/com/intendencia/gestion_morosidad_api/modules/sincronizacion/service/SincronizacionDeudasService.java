@@ -10,6 +10,9 @@ import com.intendencia.gestion_morosidad_api.modules.sincronizacion.dto.Resultad
 import com.intendencia.gestion_morosidad_api.shared.exception.IntegracionExternaException;
 import com.intendencia.gestion_morosidad_api.shared.exception.OperacionEnCursoException;
 import java.time.Clock;
+import com.intendencia.gestion_morosidad_api.integration.intendencia.geopat.client.GeoPatClient;
+import com.intendencia.gestion_morosidad_api.integration.intendencia.common.IntendenciaClient;
+import com.intendencia.gestion_morosidad_api.shared.enums.OrigenDatos;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -23,7 +26,7 @@ import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
 
 /**
- * Sincroniza las deudas con GeoPagos (CU 2.16 / 2.17):
+ * Sincroniza las deudas con GeoPagos o GeoPat, con conciliación y fecha anterior por origen:
  * /facturas/pendientes alimenta monto, fechas, tributos, estado y segmento;
  * /facturas/canceladas aporta el último cobro de cada padrón.
  * Las consultas a la API se hacen fuera de la transacción para no bloquear la base mientras se espera la respuesta.
@@ -34,6 +37,7 @@ import org.springframework.web.client.RestClientResponseException;
 public class SincronizacionDeudasService {
 
     private final GeoPagosClient geoPagosClient;
+    private final GeoPatClient geoPatClient;
     private final SincronizacionDeudasProcessor processor;
     private final DeudaRepository deudaRepository;
     private final Clock clock;
@@ -48,9 +52,15 @@ public class SincronizacionDeudasService {
     private final AtomicBoolean enCurso = new AtomicBoolean(false);
 
     public ResultadoSincronizacion sincronizar() {
+        return sincronizar(OrigenDatos.INTENDENCIA);
+    }
+
+    public ResultadoSincronizacion sincronizar(OrigenDatos origen) {
+        java.util.Objects.requireNonNull(origen);
+        IntendenciaClient client = origen == OrigenDatos.SUCIVE ? geoPatClient : geoPagosClient;
         if (usuarioApi == null || usuarioApi.isBlank()) {
             throw new IntegracionExternaException(
-                    "Faltan las credenciales de la API GeoPagos (UTEC_API_USERNAME / UTEC_API_PASSWORD)");
+                    "Faltan las credenciales de la API de Intendencia (UTEC_API_USERNAME / UTEC_API_PASSWORD)");
         }
         if (!enCurso.compareAndSet(false, true)) {
             throw new OperacionEnCursoException("Ya hay una sincronización en curso");
@@ -60,45 +70,45 @@ public class SincronizacionDeudasService {
             LocalDate hoy = inicio.toLocalDate();
 
             List<GeoPagosFacturaPendienteDto> pendientes =
-                    consultar("facturas pendientes", geoPagosClient::obtenerFacturasPendientes);
+                    consultar(origen, "facturas pendientes", client::obtenerFacturasPendientes);
 
             // Cobros desde la sincronización anterior (con un día de margen); fecha_hasta no se incluye
-            LocalDate desde = deudaRepository.ultimaSincronizacion()
+            LocalDate desde = deudaRepository.ultimaSincronizacionPorOrigen(origen)
                     .map(fecha -> fecha.toLocalDate().minusDays(1))
                     .orElse(hoy.minusDays(diasCobrosIniciales));
-            List<GeoPagosFacturaCanceladaDto> canceladas = consultar("facturas canceladas",
-                    () -> geoPagosClient.obtenerFacturasCanceladas(desde, hoy.plusDays(1)));
+            List<GeoPagosFacturaCanceladaDto> canceladas = consultar(origen, "facturas canceladas",
+                    () -> client.obtenerFacturasCanceladas(desde, hoy.plusDays(1)));
 
             // Contactos de Personas y del último GeoPago. Opcional: si falla se guardan las deudas
             // igual y los contactos se actualizan en la próxima sincronización (null = no disponible).
             List<GeoPagosContribuyenteDto> contribuyentes;
             try {
-                contribuyentes = consultar("contribuyentes", geoPagosClient::obtenerContribuyentes);
+                contribuyentes = consultar(origen, "contribuyentes", client::obtenerContribuyentes);
             } catch (IntegracionExternaException ex) {
                 contribuyentes = null;
             }
 
-            return processor.procesar(pendientes, canceladas, contribuyentes, hoy, inicio);
+            return processor.procesar(pendientes, canceladas, contribuyentes, hoy, inicio, origen);
         } finally {
             enCurso.set(false);
         }
     }
 
-    private <T> List<T> consultar(String nombre, Supplier<IntendenciaApiResponse<T>> llamada) {
+    private <T> List<T> consultar(OrigenDatos origen, String nombre, Supplier<IntendenciaApiResponse<T>> llamada) {
         try {
             IntendenciaApiResponse<T> respuesta = llamada.get();
             if (respuesta == null || respuesta.getData() == null) {
-                throw new IntegracionExternaException("GeoPagos devolvió una respuesta vacía al consultar " + nombre);
+                throw new IntegracionExternaException(origen.proveedor() + " devolvió una respuesta vacía al consultar " + nombre);
             }
             return respuesta.getData();
         } catch (RestClientResponseException ex) {
             // No se propaga el cuerpo de la respuesta al cliente: solo el código HTTP
-            log.error("GeoPagos respondió HTTP {} al consultar {}", ex.getStatusCode().value(), nombre);
+            log.error("{} respondió HTTP {} al consultar {}", origen.proveedor(), ex.getStatusCode().value(), nombre);
             throw new IntegracionExternaException(
-                    "GeoPagos respondió HTTP " + ex.getStatusCode().value() + " al consultar " + nombre, ex);
+                    origen.proveedor() + " respondió HTTP " + ex.getStatusCode().value() + " al consultar " + nombre, ex);
         } catch (RestClientException ex) {
-            log.error("No se pudo conectar con GeoPagos al consultar {}", nombre, ex);
-            throw new IntegracionExternaException("No se pudo conectar con GeoPagos al consultar " + nombre, ex);
+            log.error("No se pudo conectar con {} al consultar {}", origen.proveedor(), nombre, ex);
+            throw new IntegracionExternaException("No se pudo conectar con " + origen.proveedor() + " al consultar " + nombre, ex);
         }
     }
 }

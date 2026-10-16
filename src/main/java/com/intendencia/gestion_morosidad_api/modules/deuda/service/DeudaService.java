@@ -17,6 +17,7 @@ import com.intendencia.gestion_morosidad_api.modules.tributo.dto.TributoResponse
 import com.intendencia.gestion_morosidad_api.shared.dto.PaginaResponse;
 import com.intendencia.gestion_morosidad_api.shared.exception.RecursoNoEncontradoException;
 import java.time.Clock;
+import com.intendencia.gestion_morosidad_api.shared.enums.OrigenDatos;
 import java.time.LocalDate;
 import java.util.Collection;
 import java.util.List;
@@ -40,6 +41,10 @@ public class DeudaService {
     private final Clock clock;
     private final AccionSegmentoRepository accionSegmentoRepository;
     private final GestionRepository gestionRepository;
+
+    public List<String> listarTiposPadron() {
+        return deudaRepository.listarTiposPadron(EstadoDeuda.CANCELADA);
+    }
 
     public PaginaResponse<DeudaResponse> listar(
             DeudaFiltro filtro,
@@ -158,11 +163,11 @@ public class DeudaService {
         LocalDate hoy = LocalDate.now(clock);
 
         List<Deuda> deudas =
-                deudaRepository.findByEstadoNot(EstadoDeuda.CANCELADA);
+                deudaRepository.findParaRecalcularSegmentos(EstadoDeuda.CANCELADA, evento.tipoPadron());
 
         deudas.forEach(deuda ->
                 deuda.setSegmentoMora(
-                        reglas.segmentoPara(deuda.getDeudaDesde(), hoy, deuda.getTributos())
+                        reglas.segmentoPara(deuda.getDeudaDesde(), hoy, deuda.getPadron().getTipoPadron())
                 )
         );
 
@@ -173,10 +178,14 @@ public class DeudaService {
     }
 
     public List<DeudaResponse> listarPorCm(String cm) {
+        return listarPorCm(cm, OrigenDatos.INTENDENCIA);
+    }
+
+    public List<DeudaResponse> listarPorCm(String cm, OrigenDatos origen) {
         LocalDate hoy = LocalDate.now(clock);
 
         List<Deuda> deudas =
-                deudaRepository.findByPadronCmOrderByDeudaDesdeAsc(cm.trim());
+                deudaRepository.findByPadronCmAndPadronOrigenOrderByDeudaDesdeAsc(cm.trim(), origen);
 
         List<Long> segmentoIds = deudas.stream()
                 .map(Deuda::getSegmentoMora)

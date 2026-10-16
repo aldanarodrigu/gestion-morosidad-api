@@ -20,6 +20,7 @@ import com.intendencia.gestion_morosidad_api.modules.tributo.entity.Tributo;
 import com.intendencia.gestion_morosidad_api.modules.tributo.repository.TributoRepository;
 import com.intendencia.gestion_morosidad_api.modules.tributo.service.CodigosTributo;
 import com.intendencia.gestion_morosidad_api.shared.exception.IntegracionExternaException;
+import com.intendencia.gestion_morosidad_api.shared.enums.OrigenDatos;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -37,7 +38,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Aplica en la base, en una sola transacción, los datos obtenidos de GeoPagos.
+ * Aplica en una transacción los datos de un proveedor, sin conciliar padrones del otro origen.
  * Todo o nada: si algo falla no queda una sincronización a medias.
  * Carga las tablas en memoria una vez para no hacer consultas por cada fila.
  */
@@ -63,13 +64,22 @@ class SincronizacionDeudasProcessor {
             List<GeoPagosContribuyenteDto> contribuyentes,
             LocalDate hoy,
             LocalDateTime inicio) {
+        return procesar(pendientes, canceladas, contribuyentes, hoy, inicio, OrigenDatos.INTENDENCIA);
+    }
 
-        Contexto ctx = new Contexto(hoy, LocalDateTime.now());
+    @Transactional
+    public ResultadoSincronizacion procesar(
+            List<GeoPagosFacturaPendienteDto> pendientes,
+            List<GeoPagosFacturaCanceladaDto> canceladas,
+            List<GeoPagosContribuyenteDto> contribuyentes,
+            LocalDate hoy, LocalDateTime inicio, OrigenDatos origen) {
 
-        if (pendientes.isEmpty() && deudaRepository.countByEstadoNot(EstadoDeuda.CANCELADA) > 0) {
+        Contexto ctx = new Contexto(hoy, LocalDateTime.now(), origen);
+
+        if (pendientes.isEmpty() && deudaRepository.countByPadronOrigenAndEstadoNot(origen, EstadoDeuda.CANCELADA) > 0) {
             // Protección: una respuesta vacía por error del origen cancelaría todas las deudas
             throw new IntegracionExternaException(
-                    "GeoPagos no devolvió deudas pendientes; no se aplicaron cambios. Verificar el servicio.");
+                    origen.proveedor() + " no devolvió deudas pendientes; no se aplicaron cambios. Verificar el servicio.");
         }
 
         for (GeoPagosFacturaPendienteDto fila : pendientes) {
@@ -90,8 +100,8 @@ class SincronizacionDeudasProcessor {
                 inicio, LocalDateTime.now(), pendientes.size(), canceladas.size(),
                 ctx.deudasNuevas.size(), ctx.actualizadas, ctx.canceladas, ctx.omitidos,
                 List.copyOf(ctx.advertencias));
-        log.info("Sincronización GeoPagos: {} pendientes, {} creadas, {} actualizadas, {} canceladas, {} omitidas",
-                resultado.pendientesRecibidas(), resultado.deudasCreadas(), resultado.deudasActualizadas(),
+        log.info("Sincronización {}: {} pendientes, {} creadas, {} actualizadas, {} canceladas, {} omitidas",
+                origen.proveedor(), resultado.pendientesRecibidas(), resultado.deudasCreadas(), resultado.deudasActualizadas(),
                 resultado.deudasCanceladas(), resultado.registrosOmitidos());
         return resultado;
     }
@@ -104,7 +114,7 @@ class SincronizacionDeudasProcessor {
             return;
         }
         if (!ctx.cmsProcesados.add(cm)) {
-            ctx.omitir("CM " + cm + " repetido en la respuesta de GeoPagos");
+            ctx.omitir("CM " + cm + " repetido en la respuesta de " + ctx.origen.proveedor());
             return;
         }
         if (fila.importeDeuda() == null) {
@@ -126,6 +136,7 @@ class SincronizacionDeudasProcessor {
         Padron padron = ctx.padronesPorCm.get(cm);
         if (padron == null) {
             padron = new Padron();
+            padron.setOrigen(ctx.origen);
             padron.setCm(cm);
             ctx.padronesPorCm.put(cm, padron);
             ctx.padronesNuevos.add(padron);
@@ -169,14 +180,14 @@ class SincronizacionDeudasProcessor {
         }
 
         ctx.contactosPendientes.add(new Dato(contribuyente, TipoContacto.TELEFONO,
-                SincronizacionContactosService.PENDIENTES, texto(fila.telefono()), true));
+                ctx.fuentePendientes(), texto(fila.telefono()), true));
         ctx.contactosPendientes.add(new Dato(contribuyente, TipoContacto.EMAIL,
-                SincronizacionContactosService.PENDIENTES, fila.email(), true));
+                ctx.fuentePendientes(), fila.email(), true));
         String calle = texto(fila.direccion());
         String puerta = texto(fila.numeroPuerta());
         String domicilio = calle == null ? puerta : puerta == null ? calle : calle + " " + puerta;
         ctx.contactosPendientes.add(new Dato(contribuyente, TipoContacto.DOMICILIO,
-                SincronizacionContactosService.PENDIENTES, domicilio, true));
+                ctx.fuentePendientes(), domicilio, true));
 
         padron.setNumeroPadron(limitar(numeroPadron, 100));
         padron.setTipoPadron(limitar(texto(fila.padtipo()), 100));
@@ -204,7 +215,7 @@ class SincronizacionDeudasProcessor {
         deuda.setConvenio(convenio);
         actualizarTributos(deuda, CodigosTributo.parsear(fila.tributosDeuda()), ctx);
         deuda.setEstado(ReglasEstadoDeuda.enPendientes(deuda.getEstado(), convenio));
-        deuda.setSegmentoMora(ctx.reglas.segmentoPara(deuda.getDeudaDesde(), ctx.hoy, deuda.getTributos()));
+        deuda.setSegmentoMora(ctx.reglas.segmentoPara(deuda.getDeudaDesde(), ctx.hoy, padron.getTipoPadron()));
         deuda.setFechaSincronizacion(ctx.ahora);
     }
 
@@ -218,6 +229,7 @@ class SincronizacionDeudasProcessor {
         for (String codigo : codigos) {
             deuda.getTributos().add(ctx.tributosPorCodigo.computeIfAbsent(limitar(codigo, 20), nuevo -> {
                 Tributo tributo = new Tributo();
+                tributo.setOrigen(ctx.origen);
                 tributo.setCodigo(nuevo);
                 ctx.tributosNuevos.add(tributo);
                 return tributo;
@@ -233,7 +245,7 @@ class SincronizacionDeudasProcessor {
      */
     private void aplicarContactosDeContribuyentes(List<GeoPagosContribuyenteDto> contribuyentes, Contexto ctx) {
         if (contribuyentes == null) {
-            ctx.advertir("No se pudo consultar contribuyentes-geopagos: los contactos de Personas y GeoPagos "
+            ctx.advertir("No se pudo consultar contribuyentes de " + ctx.origen.proveedor() + ": los contactos "
                     + "se actualizarán en la próxima sincronización");
             return;
         }
@@ -255,9 +267,10 @@ class SincronizacionDeudasProcessor {
                 contribuyente.setNombre(nombrePersonas);
             }
             ctx.contactosPendientes.add(new Dato(contribuyente, TipoContacto.TELEFONO,
-                    SincronizacionContactosService.PERSONAS, texto(dto.telefonoPersonas()), true));
+                    ctx.fuentePersonas(), texto(dto.telefonoPersonas()), true));
             ctx.contactosPendientes.add(new Dato(contribuyente, TipoContacto.EMAIL,
-                    SincronizacionContactosService.PERSONAS, texto(dto.emailPersonas()), true));
+                    ctx.fuentePersonas(), texto(dto.emailPersonas()), true));
+            if (ctx.origen == OrigenDatos.SUCIVE) continue;
             ctx.contactosPendientes.add(new Dato(contribuyente, TipoContacto.TELEFONO,
                     SincronizacionContactosService.GEOPAGOS, texto(dto.telefonoGeoPagos()), false));
             ctx.contactosPendientes.add(new Dato(contribuyente, TipoContacto.EMAIL,
@@ -337,9 +350,10 @@ class SincronizacionDeudasProcessor {
     private final class Contexto {
         final LocalDate hoy;
         final LocalDateTime ahora;
+        final OrigenDatos origen;
         final ReglasSegmentacion reglas = configuracionSegmentoService.reglasVigentes();
-        final Map<String, Tributo> tributosPorCodigo = porClave(tributoRepository.findAll(), Tributo::getCodigo);
-        final Map<String, Padron> padronesPorCm = porClave(padronRepository.findAll(), Padron::getCm);
+        final Map<String, Tributo> tributosPorCodigo;
+        final Map<String, Padron> padronesPorCm;
 
         final Map<String, Contribuyente> contribuyentesPorDocumento =
                 contribuyenteRepository.findAll().stream()
@@ -351,8 +365,7 @@ class SincronizacionDeudasProcessor {
                                 (a, b) -> a
                         ));
 
-        final Map<String, Deuda> deudasPorCm =
-                porClave(deudaRepository.findAllConPadron(), deuda -> deuda.getPadron().getCm());
+        final Map<String, Deuda> deudasPorCm;
         final Set<String> cmsProcesados = new HashSet<>();
         /** CM con deuda positiva que quedaron guardados en esta corrida. */
         final Set<String> cmsImportados = new HashSet<>();
@@ -366,9 +379,21 @@ class SincronizacionDeudasProcessor {
         int canceladas;
         int omitidos;
 
-        Contexto(LocalDate hoy, LocalDateTime ahora) {
+        Contexto(LocalDate hoy, LocalDateTime ahora, OrigenDatos origen) {
             this.hoy = hoy;
             this.ahora = ahora;
+            this.origen = origen;
+            tributosPorCodigo = porClave(tributoRepository.findAllByOrigen(origen), Tributo::getCodigo);
+            padronesPorCm = porClave(padronRepository.findAllByOrigen(origen), Padron::getCm);
+            deudasPorCm = porClave(deudaRepository.findAllConPadronPorOrigen(origen), deuda -> deuda.getPadron().getCm());
+        }
+
+        String fuentePersonas() {
+            return origen == OrigenDatos.SUCIVE ? SincronizacionContactosService.GEOPAT_PERSONAS : SincronizacionContactosService.PERSONAS;
+        }
+
+        String fuentePendientes() {
+            return origen == OrigenDatos.SUCIVE ? SincronizacionContactosService.GEOPAT_PENDIENTES : SincronizacionContactosService.PENDIENTES;
         }
 
         /** Aviso que no implica omitir un registro. */

@@ -7,6 +7,10 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.SequenceGenerator;
 import jakarta.persistence.Table;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.UniqueConstraint;
+import com.intendencia.gestion_morosidad_api.shared.enums.OrigenDatos;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -16,7 +20,7 @@ import lombok.Setter;
  * El código es texto: es un identificador, no un número operable.
  */
 @Entity
-@Table(name = "tributos")
+@Table(name = "tributos", uniqueConstraints = @UniqueConstraint(name = "uk_tributo_origen_codigo", columnNames = {"origen", "codigo"}))
 @Getter
 @Setter
 @NoArgsConstructor
@@ -28,8 +32,12 @@ public class Tributo {
     @SequenceGenerator(name = "tributos_seq", sequenceName = "tributos_id_seq", allocationSize = 1000)
     private Long id;
 
-    @Column(nullable = false, unique = true, length = 20)
+    @Column(nullable = false, length = 20)
     private String codigo;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private OrigenDatos origen = OrigenDatos.INTENDENCIA;
 
     @Column(length = 200)
     private String descripcion;
