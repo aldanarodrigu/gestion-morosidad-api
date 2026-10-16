@@ -192,6 +192,7 @@ son normales; no volver esas entidades a `GenerationType.IDENTITY`.
 |---|---|
 | `GET /api/deudas` | Paginado. Filtros: `estado`, `padron`, `tipoPadron`, `origen`, `contribuyente`, `localidad`, `segmento`, `tributo`, `conContacto`. Por defecto, deudas no canceladas con importe > 0, las más antiguas primero |
 | `GET /api/deudas/agrupadas` | Cartera agrupada por documento; mismos filtros y paginación por contribuyentes |
+| `GET /api/deudas/exportar` | Excel `.xlsx` de toda la cartera filtrada; mismos filtros y orden. `agrupar=true` agrega un resumen por contribuyente |
 | `GET /api/deudas/{id}`, `/api/deudas/{id}/tributos` | Detalle y tributos de una deuda |
 | `GET /api/contribuyentes` | Paginado (`page`, `size`, `sort`; por defecto por nombre). Contribuyentes con deuda vigente, un registro por padrón. Filtros opcionales `nombre` y `documento` (coincidencia parcial, sin distinguir mayúsculas; si se envían ambos deben coincidir en el mismo contribuyente) |
 | `GET /api/contribuyentes/{cm}` | Contribuyente del padrón con ese CM (404 si no existe) |
@@ -517,3 +518,35 @@ informados, sin excluir CNV ni aplicar deduplicaciones supuestas.
 usa exclusivamente PostgreSQL desechable indicado por `GEOPAT_TEST_DB_URL`; prueba CM y
 tributos repetidos entre origenes, cancelaciones independientes, datos personales nulos,
 filtros, contactos, agrupacion y el endpoint de sincronizacion.
+
+
+### Exportación de cartera a Excel
+
+El botón **Exportar Excel** abre un panel con filtros opcionales de **segmento de mora**,
+**PadTipo** y **origen**. Se puede elegir uno, combinar varios o dejarlos todos vacíos.
+Estos filtros son independientes de los filtros del listado y comienzan vacíos.
+**Descargar Excel** genera `cartera-morosidad.xlsx` con todas las filas que cumplen la
+combinación elegida, independientemente de la página visible. Sin filtros, exporta toda
+la cartera vigente (excluye canceladas e importes no positivos, igual que el listado).
+**Limpiar filtros** restablece la exportación completa. Se conserva el orden y la opción
+de agrupar por contribuyente de la cartera.
+Consulta únicamente la base local: no dispara sincronizaciones ni llamadas a GeoPagos/GeoPat.
+
+- Hoja **Cartera**: CM, N.º padrón, contribuyente, documento, origen, PadTipo, tributo,
+  segmento, días vencido, deuda, cantidad de gestiones y todas las acciones sugeridas.
+  También conserva convenio y disponibilidad de contacto.
+- Con **Agrupar por contribuyente** activado, agrega la hoja **Contribuyentes** con
+  documento, nombre, cantidad de deudas, segmento más avanzado, días máximos de atraso y
+  deuda total; la hoja Cartera conserva el detalle completo de esas deudas.
+- CM, número de padrón y documento se guardan como texto para conservar ceros iniciales.
+  Deuda, días y cantidad de gestiones son celdas numéricas.
+- Administrador, Notificador y Analista pueden exportar. Se requiere autenticación.
+- Endpoint: `GET /api/deudas/exportar`. Acepta los mismos filtros y `sort` del listado,
+  además de `agrupar=true|false`. `page` y `size` no limitan la exportación.
+- La lectura interna se realiza por lotes dentro de una misma transacción de solo lectura
+  para mantener resultados consistentes si hay una sincronización concurrente.
+
+Pruebas específicas: `CarteraExportacionServiceTest` valida el archivo XLSX, todas las
+páginas, agrupación y tipos de celdas; `CarteraExportacionControllerTest` valida filtros,
+descarga y permisos. En el frontend, `CarteraExportacion.test.ts` y `carteraService.test.ts`
+comprueban solicitud, descarga y errores.
