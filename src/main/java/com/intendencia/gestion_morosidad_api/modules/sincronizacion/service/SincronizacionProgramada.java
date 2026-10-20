@@ -9,8 +9,8 @@ import org.springframework.scheduling.annotation.Scheduled;
 import com.intendencia.gestion_morosidad_api.shared.enums.OrigenDatos;
 
 /**
- * Sincronización automática. Deshabilitada por defecto: se activa con
- * SINCRONIZACION_AUTOMATICA=true (y opcionalmente SINCRONIZACION_CRON; por defecto todos los días a las 3:00).
+ * Sincronización automática, habilitada por defecto todos los días a las 3:00 de Uruguay.
+ * SINCRONIZACION_AUTOMATICA=false permite deshabilitarla y SINCRONIZACION_CRON cambiar el horario.
  */
 @Configuration
 @EnableScheduling

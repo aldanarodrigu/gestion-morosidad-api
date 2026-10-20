@@ -4,6 +4,8 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import com.intendencia.gestion_morosidad_api.integration.intendencia.common.FechaIntendenciaDeserializer;
+import tools.jackson.databind.annotation.JsonDeserialize;
 
 /** Fila de GET /api/v1/utec/facturas/canceladas: último cobro de cada CM dentro del intervalo pedido. */
 @JsonIgnoreProperties(ignoreUnknown = true)
@@ -13,6 +15,6 @@ public record GeoPagosFacturaCanceladaDto(
         @JsonProperty("PERSONA") String persona,
         @JsonProperty("DOCUMENTO") Object documento,
         @JsonProperty("NUMERO_COBRO") Object numeroCobro,
-        @JsonProperty("FECHA_COBRO") LocalDate fechaCobro,
+        @JsonProperty("FECHA_COBRO") @JsonDeserialize(using = FechaIntendenciaDeserializer.class) LocalDate fechaCobro,
         @JsonProperty("IMPORTE_TOTAL") BigDecimal importeTotal) {
 }

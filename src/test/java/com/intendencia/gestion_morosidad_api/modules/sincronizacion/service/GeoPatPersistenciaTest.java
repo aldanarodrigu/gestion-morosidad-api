@@ -1,6 +1,7 @@
 package com.intendencia.gestion_morosidad_api.modules.sincronizacion.service;
 
 import com.intendencia.gestion_morosidad_api.integration.intendencia.common.IntendenciaApiResponse;
+import com.intendencia.gestion_morosidad_api.integration.intendencia.common.IntendenciaPaginador;
 import com.intendencia.gestion_morosidad_api.integration.intendencia.geopagos.dto.GeoPagosFacturaPendienteDto;
 import com.intendencia.gestion_morosidad_api.integration.intendencia.geopat.client.GeoPatClient;
 import com.intendencia.gestion_morosidad_api.modules.deuda.entity.EstadoDeuda;
@@ -14,6 +15,8 @@ import java.time.*;
 import java.util.List;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -24,12 +27,17 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.client.MockRestServiceServer;
+import org.springframework.web.client.RestClient;
+import org.springframework.http.HttpStatus;
 import org.springframework.transaction.annotation.Transactional;
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.queryParam;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.*;
 
 /** Datos sintéticos en PostgreSQL desechable. Nunca consulta la API ni usa la base de trabajo. */
 @EnabledIfEnvironmentVariable(named = "GEOPAT_TEST_DB_URL", matches = ".+")
@@ -61,6 +69,34 @@ class GeoPatPersistenciaTest {
     void importar(OrigenDatos origen, GeoPagosFacturaPendienteDto... filas) {
         processor.procesar(List.of(filas), List.of(), List.of(), LocalDate.now(clock), LocalDateTime.now(clock), origen);
         em.flush(); em.clear();
+    }
+
+    @ParameterizedTest @EnumSource(OrigenDatos.class)
+    void registroIncompletoNoCancelaNiModificaLaDeudaPersistidaNiElOtroOrigen(OrigenDatos origen) {
+        importar(OrigenDatos.INTENDENCIA, fila(123, "CIU", "1", "60", "DOC-A"));
+        importar(OrigenDatos.SUCIVE, fila(123, "PAT", "200", "40", null));
+        var original = deudas.findByPadronCmAndPadronOrigen("123", origen).orElseThrow();
+        var id = original.getId();
+        var importe = original.getImporte();
+        var fecha = original.getFechaSincronizacion();
+        var registro = new GeoPagosFacturaPendienteDto(123, null, null, null, "PAT", null,
+                null, null, null, null, null, null, "NO", "200", new BigDecimal("150"),
+                LocalDate.now(clock).minusDays(100), LocalDate.now(clock).minusDays(10), "2026");
+
+        var resultado = processor.procesar(List.of(registro), List.of(), List.of(),
+                LocalDate.now(clock), LocalDateTime.now(clock), origen);
+        em.flush(); em.clear();
+
+        var conservada = deudas.findByPadronCmAndPadronOrigen("123", origen).orElseThrow();
+        assertThat(conservada.getId()).isEqualTo(id);
+        assertThat(conservada.getImporte()).isEqualByComparingTo(importe);
+        assertThat(conservada.getEstado()).isEqualTo(EstadoDeuda.PENDIENTE);
+        assertThat(conservada.getFechaSincronizacion()).isEqualTo(fecha);
+        assertThat(deudas.count()).isEqualTo(2);
+        assertThat(deudas.findByPadronCmAndPadronOrigen("123", OrigenDatos.INTENDENCIA).orElseThrow().getImporte()).isEqualByComparingTo("60");
+        assertThat(deudas.findByPadronCmAndPadronOrigen("123", OrigenDatos.SUCIVE).orElseThrow().getImporte()).isEqualByComparingTo("40");
+        assertThat(resultado.deudasCanceladas()).isZero();
+        assertThat(resultado.registrosOmitidos()).isEqualTo(1);
     }
 
     @Test void mismoCmYCodigoDeTributoPuedenExistirEnAmbosOrigenesSinSobrescribirse() {
@@ -126,6 +162,55 @@ class GeoPatPersistenciaTest {
         mvc.perform(get("/api/deudas/agrupadas").param("origen", "SUCIVE"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.contenido[0].importeTotal").value(40))
                 .andExpect(jsonPath("$.contenido[0].deudas.length()").value(1));
+    }
+
+    String pagina(long cm, int numero) {
+        return """
+                {"data":[{"CM":%d,"NUMERO_PADRON":"123","PADTIPO":"PAT",
+                "IMPORTE_DEUDA":"50","DEUDA_DESDE":"2025-01-01","TRIBUTOS_DEUDA":"200"}],
+                "meta":{"total":2,"current_page":%d,"per_page":1,"last_page":2,
+                "from":%d,"to":%d,"has_more":%s}}
+                """.formatted(cm, numero, numero, numero, numero == 1);
+    }
+
+    @Test void deudaDeLaSegundaPaginaNoSeCancela() throws Exception {
+        importar(OrigenDatos.INTENDENCIA, fila(123, "CIU", "1", "60", null));
+        importar(OrigenDatos.SUCIVE, fila(124, "PAT", "200", "40", null));
+        var builder = RestClient.builder().baseUrl("https://api.example.test");
+        var server = MockRestServiceServer.bindTo(builder).build();
+        var client = new GeoPatClient(new IntendenciaPaginador(builder.build(), 1000));
+        server.expect(queryParam("page", "1")).andRespond(withSuccess(pagina(123, 1), MediaType.APPLICATION_JSON));
+        server.expect(queryParam("page", "2")).andRespond(withSuccess(pagina(124, 2).replace("2025-01-01", "0000-00-00"), MediaType.APPLICATION_JSON));
+        when(geoPatClient.obtenerFacturasPendientes()).thenAnswer(inv -> client.obtenerFacturasPendientes());
+        when(geoPatClient.obtenerFacturasCanceladas(any(), any())).thenReturn(new IntendenciaApiResponse<>(List.of(), null));
+        when(geoPatClient.obtenerContribuyentes()).thenReturn(new IntendenciaApiResponse<>(List.of(), null));
+        mvc.perform(post("/api/sincronizaciones/deudas").param("origen", "SUCIVE")).andExpect(status().isOk());
+        em.flush(); em.clear();
+        var deuda = deudas.findByPadronCmAndPadronOrigen("124", OrigenDatos.SUCIVE).orElseThrow();
+        assertThat(deuda.getEstado()).isEqualTo(EstadoDeuda.PENDIENTE);
+        assertThat(deuda.getImporte()).isEqualByComparingTo("50");
+        assertThat(deuda.getDeudaDesde()).isNull();
+        assertThat(deuda.getSegmentoMora()).isNull();
+        assertThat(deudas.findByPadronCmAndPadronOrigen("123", OrigenDatos.INTENDENCIA).orElseThrow().getImporte()).isEqualByComparingTo("60");
+        server.verify();
+    }
+
+    @Test void paginaFallidaNoImportaNiCancelaEnPostgres() throws Exception {
+        importar(OrigenDatos.SUCIVE, fila(124, "PAT", "200", "40", null));
+        var builder = RestClient.builder().baseUrl("https://api.example.test");
+        var server = MockRestServiceServer.bindTo(builder).build();
+        var client = new GeoPatClient(new IntendenciaPaginador(builder.build(), 1000));
+        server.expect(queryParam("page", "1")).andRespond(withSuccess(pagina(123, 1), MediaType.APPLICATION_JSON));
+        server.expect(queryParam("page", "2")).andRespond(withStatus(HttpStatus.GATEWAY_TIMEOUT));
+        when(geoPatClient.obtenerFacturasPendientes()).thenAnswer(inv -> client.obtenerFacturasPendientes());
+        mvc.perform(post("/api/sincronizaciones/deudas").param("origen", "SUCIVE")).andExpect(status().isBadGateway());
+        em.flush(); em.clear();
+        assertThat(deudas.count()).isEqualTo(1);
+        var deuda = deudas.findByPadronCmAndPadronOrigen("124", OrigenDatos.SUCIVE).orElseThrow();
+        assertThat(deuda.getEstado()).isEqualTo(EstadoDeuda.PENDIENTE);
+        assertThat(deuda.getImporte()).isEqualByComparingTo("40");
+        assertThat(padrones.findByCmAndOrigen("123", OrigenDatos.SUCIVE)).isEmpty();
+        server.verify();
     }
 
     @Test void endpointAdminSincronizaGeoPatYDevuelveOrigenEnLaCartera() throws Exception {

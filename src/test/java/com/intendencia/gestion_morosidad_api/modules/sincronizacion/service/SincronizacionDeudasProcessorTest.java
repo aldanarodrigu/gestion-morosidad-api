@@ -27,14 +27,17 @@ import java.math.BigDecimal;
 import com.intendencia.gestion_morosidad_api.shared.enums.OrigenDatos;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneId;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -47,7 +50,49 @@ class SincronizacionDeudasProcessorTest {
     @Mock private SincronizacionContactosService sincronizacionContactosService;
     @Mock private TributoRepository tributoRepository;
     @Mock private ConfiguracionSegmentoService configuracionSegmentoService;
-    @InjectMocks private SincronizacionDeudasProcessor processor;
+    private SincronizacionDeudasProcessor processor;
+
+    @BeforeEach void prepararReloj() {
+        processor = new SincronizacionDeudasProcessor(deudaRepository, padronRepository,
+                contribuyenteRepository, sincronizacionContactosService, tributoRepository,
+                configuracionSegmentoService,
+                Clock.fixed(Instant.parse("2026-09-24T15:00:00Z"), ZoneId.of("America/Montevideo")));
+    }
+
+    static java.util.stream.Stream<org.junit.jupiter.params.provider.Arguments> padronesIncompletos() {
+        return java.util.Arrays.stream(OrigenDatos.values()).flatMap(origen ->
+                java.util.stream.Stream.of(null, "", "   ").map(numero ->
+                        org.junit.jupiter.params.provider.Arguments.of(origen, numero)));
+    }
+
+    @ParameterizedTest
+    @org.junit.jupiter.params.provider.MethodSource("padronesIncompletos")
+    void padronIncompletoConservaSuDeudaSinImpedirCancelarLasRealmenteAusentes(OrigenDatos origen, String numero) {
+        Deuda presente = deudaExistente();
+        Deuda ausente = deudaExistente();
+        ausente.setId(2L); ausente.getPadron().setCm("456");
+        LocalDateTime fechaAnterior = LocalDateTime.of(2026,9,20,12,0);
+        presente.setFechaSincronizacion(fechaAnterior);
+        presente.getPadron().setOrigen(origen); ausente.getPadron().setOrigen(origen);
+        when(padronRepository.findAllByOrigen(origen)).thenReturn(List.of(presente.getPadron(), ausente.getPadron()));
+        when(deudaRepository.findAllConPadronPorOrigen(origen)).thenReturn(List.of(presente, ausente));
+        when(configuracionSegmentoService.reglasVigentes()).thenReturn(new ReglasSegmentacion(List.of()));
+        var fila = new GeoPagosFacturaPendienteDto(123, numero, null, null, "CIU", null,
+                null, null, null, null, null, null, "NO", null, new BigDecimal("150"),
+                LocalDate.of(2026,9,1), LocalDate.of(2026,9,1), "2026");
+
+        var resultado = processor.procesar(List.of(fila), List.of(), List.of(),
+                LocalDate.of(2026,9,24), LocalDateTime.of(2026,9,24,12,0), origen);
+
+        assertThat(presente.getEstado()).isEqualTo(EstadoDeuda.EN_GESTION);
+        assertThat(presente.getImporte()).isEqualByComparingTo("100");
+        assertThat(presente.getPadron().getNumeroPadron()).isEqualTo("4567");
+        assertThat(presente.getFechaSincronizacion()).isEqualTo(fechaAnterior);
+        assertThat(ausente.getEstado()).isEqualTo(EstadoDeuda.CANCELADA);
+        assertThat(resultado.deudasCanceladas()).isEqualTo(1);
+        assertThat(resultado.registrosOmitidos()).isEqualTo(1);
+        assertThat(resultado.deudasCreadas()).isZero();
+    }
 
     @Test
     void actualizaElContribuyenteDelPadronExistenteSinDuplicarlo() {

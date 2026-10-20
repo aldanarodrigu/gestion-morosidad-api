@@ -113,15 +113,18 @@ Manual, con un usuario Administrador (por defecto `admin` / `admin123`, cambiarl
 datos reales):
 
 ```powershell
-$api = "http://localhost:8080"
+$api = "http://127.0.0.1:9080" # Docker; si se ejecuta Java directamente, usar su puerto configurado.
 $login = Invoke-RestMethod -Method Post -Uri "$api/api/auth/login" -ContentType "application/json" `
   -Body '{"username":"admin","password":"admin123"}'
-Invoke-RestMethod -Method Post -Uri "$api/api/sincronizaciones/deudas" `
-  -Headers @{ Authorization = "Bearer $($login.token)" } -TimeoutSec 600
+Invoke-RestMethod -Method Post -Uri "$api/api/sincronizaciones/deudas?origen=INTENDENCIA" `
+  -Headers @{ Authorization = "Bearer $($login.token)" } -TimeoutSec 3600
+# Para GeoPat: reemplazar INTENDENCIA por SUCIVE.
 ```
 
-Automática: `SINCRONIZACION_AUTOMATICA=true` en el `.env` (por defecto todos los días a las 3:00;
-otro horario con `SINCRONIZACION_CRON`, formato cron de Spring, por ejemplo `0 0 3 * * *`).
+Automática: habilitada por defecto todos los días a las 3:00 de Uruguay. En `.env`,
+`SINCRONIZACION_AUTOMATICA=false` la deshabilita y `SINCRONIZACION_CRON` cambia el horario
+(formato cron de Spring, por ejemplo `0 0 3 * * *`). Docker Compose transmite ambas opciones
+al backend; al cambiarlas se debe recrear el contenedor de la API.
 
 Devuelve un resumen: deudas recibidas, creadas, actualizadas, canceladas, omitidas y hasta 100
 advertencias con el motivo de cada omisión (solo CM, sin datos personales).
@@ -146,6 +149,11 @@ advertencias con el motivo de cada omisión (solo CM, sin datos personales).
 - Solo se importan los CM con `IMPORTE_DEUDA > 0`. Con importe cero o negativo no se crea nada,
   y si la deuda ya existía se cancela. Un importe nulo se omite sin cancelar la deuda.
 - Una deuda que ya no aparece en `/facturas/pendientes` pasa a `CANCELADA`.
+- Si aparece su CM pero falta el numero de padron, la fila se omite conservando la deuda
+  existente (importe, estado y fecha de sincronizacion). Un dato incompleto no demuestra
+  que haya sido saldada. Las deudas de CM realmente ausentes se siguen conciliando.
+- Inicio, fin y fechas guardadas usan el mismo reloj de `America/Montevideo`, incluso
+  cuando el contenedor se ejecuta en UTC.
 - Estado de las deudas pendientes: con convenio activo → `EN_CONVENIO`; si estaba `CANCELADA` o
   `EN_CONVENIO` y ya no → `PENDIENTE`; `EN_GESTION` (lo pone un usuario) no se pisa. Son reglas
   provisorias hasta que la Intendencia confirme el CU 2.17.
@@ -163,6 +171,16 @@ advertencias con el motivo de cada omisión (solo CM, sin datos personales).
 - La sincronizacion de contactos solo agrega datos faltantes por contribuyente, tipo y fuente.
   No sobrescribe ni elimina contactos existentes, incluidos los importados que se hayan corregido
   manualmente. Los valores vacios de la API se ignoran; no se crean contactos vacios.
+
+### Verificacion de sincronizacion
+
+Revision de sincronizacion (20/10/2026): se agregaron 15 casos de prueba para padrones
+incompletos, reloj de Uruguay con servidor UTC, paginacion de los tres endpoints GeoPagos,
+fallos de cobros obligatorios y preservacion en PostgreSQL de las deudas de ambos origenes.
+Ocho casos reprodujeron fallos antes de corregirlos. Tras las correcciones, la suite completa
+del backend ejecuto 299 pruebas sin fallos ni omitidas, usando exclusivamente PostgreSQL
+desechable. Tambien se verificaron los valores predeterminados y personalizados de la
+configuracion automatica en Docker Compose.
 
 ### Tiempos medidos (08/10/2026, datos reales)
 
@@ -477,6 +495,26 @@ contactos de terceros, valores vacíos, paginación, sumas y un contacto recién
 
 ## Integracion GeoPat (origen SUCIVE)
 
+Los tres endpoints de cada proveedor se descargan completos con `page` y `per_page`.
+`UTEC_API_PAGE_SIZE` configura el tamaño solicitado (1 a 1000; predeterminado 1000),
+tambien dentro de Docker Compose. Los filtros de fecha de cobros se conservan en cada pagina.
+Antes de conciliar se validan total estable, numero y tamaño de pagina, ultima pagina,
+`has_more`, limites `from`/`to`, cantidad de filas y CM sin repeticiones en pendientes y
+contribuyentes. Una pagina fallida o inconsistente en pendientes o cobros aborta sin escribir.
+Si falla una pagina de contribuyentes se descarta esa consulta opcional completa.
+Las paginas se consultan fuera de la transaccion y el avance se registra cada diez paginas.
+La primera carga puede tardar varios minutos; no reintentar mientras otra siga en curso.
+Las fechas `0000-00-00` recibidas del origen se interpretan como no informadas (`null`).
+La deuda positiva se conserva; si falta su fecha inicial no se calculan dias ni segmento
+de mora. No se sustituyen fechas ni se aceptan otros valores invalidos silenciosamente.
+
+Validacion de la primera carga local completa (20/10/2026): se recibieron 119.660 filas
+de pendientes y 10.451 de cobros, ademas de 161.256 registros de contribuyentes. Se crearon
+118.895 deudas SUCIVE de saldo positivo y se omitieron 765 filas segun las validaciones
+de importacion. Quedaron 74 deudas sin fecha inicial informada. La cartera individual y
+agrupada devolvieron los registros importados; las 22.966 deudas de Intendencia conservaron
+sus importes, estados y fechas de sincronizacion, verificados antes y despues de la carga.
+
 La cartera comparte la pantalla para los dos proveedores. El origen viene de `padron.origen`:
 `INTENDENCIA` para GeoPagos y `SUCIVE` para GeoPat. El filtro `origen` se aplica en SQL en
 la cartera individual y agrupada, incluyendo sus totales y paginacion.
@@ -513,6 +551,23 @@ Pendiente de validar con clientes: gestion especifica de CNV/convenios. El anexo
 la deuda de un convenio puede aparecer en su padron y en los padrones vinculados; no permite
 deducir esas relaciones para corregir un total general. Se conservan los importes y codigos
 informados, sin excluir CNV ni aplicar deduplicaciones supuestas.
+
+Pendiente de consultar al proveedor: datos personales de GeoPat. El 20/10/2026 se revisaron
+1.000 filas de pendientes y 1.000 de contribuyentes, mas consultas por CM de CNV, GEN, PAT
+y VAR. En las muestras, `PERSONA`, `DOCUMENTO` y `NOMBRE_PERSONAS` llegaron vacios; el
+endpoint de contribuyentes tampoco incluyo un campo de documento. Los 118.895 padrones
+SUCIVE importados quedaron sin nombre ni documento. Se requiere que el origen informe
+estos datos o indique la consulta que permite obtenerlos; no se infieren identidades por
+nombre, matricula ni CM de otro origen.
+
+Pendiente: activar el filtro «Con multa / Sin multa» incluyendo multas de transito SUCIVE
+y multas/recargos de Intendencia, segun lo confirmado por el usuario. El selector actual
+solo mantiene el estado en la interfaz/URL; no aplica un predicado en la API. Las respuestas
+de pendientes revisadas no incluyen importes ni indicadores separados de multa/recargo,
+y los tributos importados carecen de descripcion. Se requiere un catalogo por origen que
+confirme si esos conceptos se incluyen en TRIBUTOS_DEUDA, o campos explicitos del proveedor.
+Una deuda vencida o un origen SUCIVE no bastan para clasificarla. Al implementarlo, el filtro
+debe aplicarse antes de paginar/agrupar y conservarse en los totales y la exportacion.
 
 `GeoPatClientTest` verifica las rutas, fechas y formatos del anexo sin red. `GeoPatPersistenciaTest`
 usa exclusivamente PostgreSQL desechable indicado por `GEOPAT_TEST_DB_URL`; prueba CM y

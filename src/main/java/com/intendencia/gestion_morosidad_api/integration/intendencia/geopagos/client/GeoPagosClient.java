@@ -1,57 +1,33 @@
 package com.intendencia.gestion_morosidad_api.integration.intendencia.geopagos.client;
 
-import com.intendencia.gestion_morosidad_api.integration.intendencia.common.IntendenciaApiResponse;
-import com.intendencia.gestion_morosidad_api.integration.intendencia.geopagos.dto.GeoPagosContribuyenteDto;
-import com.intendencia.gestion_morosidad_api.integration.intendencia.geopagos.dto.GeoPagosFacturaCanceladaDto;
-import com.intendencia.gestion_morosidad_api.integration.intendencia.geopagos.dto.GeoPagosFacturaPendienteDto;
+import com.intendencia.gestion_morosidad_api.integration.intendencia.common.*;
+import com.intendencia.gestion_morosidad_api.integration.intendencia.geopagos.dto.*;
 import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
+import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.stereotype.Component;
-import org.springframework.web.client.RestClient;
 
 @Component
 @RequiredArgsConstructor
-public class GeoPagosClient implements com.intendencia.gestion_morosidad_api.integration.intendencia.common.IntendenciaClient {
+public class GeoPagosClient implements IntendenciaClient {
+    private final IntendenciaPaginador paginador;
 
-    private final RestClient intendenciaRestClient;
-
-    public IntendenciaApiResponse<GeoPagosContribuyenteDto> obtenerContribuyentes() {
-
-        return intendenciaRestClient
-                .get()
-                .uri("/api/v1/utec/contribuyentes-geopagos")
-                .retrieve()
-                .body(new ParameterizedTypeReference<
-                        IntendenciaApiResponse<GeoPagosContribuyenteDto>>() {
-                });
+    @Override public IntendenciaApiResponse<GeoPagosContribuyenteDto> obtenerContribuyentes() {
+        return paginador.obtenerTodo("/api/v1/utec/contribuyentes-geopagos", Map.of(),
+                new ParameterizedTypeReference<>() {}, GeoPagosContribuyenteDto::cm);
     }
 
-    /** Deuda vencida antes de hoy, agrupada por CM. No recibe parámetros (manual, sección 6). */
-    public IntendenciaApiResponse<GeoPagosFacturaPendienteDto> obtenerFacturasPendientes() {
-        return intendenciaRestClient
-                .get()
-                .uri("/api/v1/utec/facturas/pendientes")
-                .retrieve()
-                .body(new ParameterizedTypeReference<
-                        IntendenciaApiResponse<GeoPagosFacturaPendienteDto>>() {
-                });
+    /** Foto completa de deuda vencida: todas las paginas, sin filtros por padron. */
+    @Override public IntendenciaApiResponse<GeoPagosFacturaPendienteDto> obtenerFacturasPendientes() {
+        return paginador.obtenerTodo("/api/v1/utec/facturas/pendientes", Map.of(),
+                new ParameterizedTypeReference<>() {}, GeoPagosFacturaPendienteDto::cm);
     }
 
-    /**
-     * Último cobro de cada CM en el intervalo [desde, hasta): hasta NO se incluye (manual, sección 5).
-     */
-    public IntendenciaApiResponse<GeoPagosFacturaCanceladaDto> obtenerFacturasCanceladas(LocalDate desde, LocalDate hasta) {
-        return intendenciaRestClient
-                .get()
-                .uri(uri -> uri.path("/api/v1/utec/facturas/canceladas")
-                        .queryParam("fecha_desde", desde.format(DateTimeFormatter.ISO_LOCAL_DATE))
-                        .queryParam("fecha_hasta", hasta.format(DateTimeFormatter.ISO_LOCAL_DATE))
-                        .build())
-                .retrieve()
-                .body(new ParameterizedTypeReference<
-                        IntendenciaApiResponse<GeoPagosFacturaCanceladaDto>>() {
-                });
+    /** Todos los cobros del intervalo [desde, hasta), incluyendo sus paginas. */
+    @Override public IntendenciaApiResponse<GeoPagosFacturaCanceladaDto> obtenerFacturasCanceladas(LocalDate desde, LocalDate hasta) {
+        return paginador.obtenerTodo("/api/v1/utec/facturas/canceladas",
+                Map.of("fecha_desde", desde.toString(), "fecha_hasta", hasta.toString()),
+                new ParameterizedTypeReference<>() {}, null);
     }
 }

@@ -22,6 +22,7 @@ import com.intendencia.gestion_morosidad_api.modules.tributo.service.CodigosTrib
 import com.intendencia.gestion_morosidad_api.shared.exception.IntegracionExternaException;
 import com.intendencia.gestion_morosidad_api.shared.enums.OrigenDatos;
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -56,6 +57,7 @@ class SincronizacionDeudasProcessor {
     private final SincronizacionContactosService sincronizacionContactosService;
     private final TributoRepository tributoRepository;
     private final ConfiguracionSegmentoService configuracionSegmentoService;
+    private final Clock clock;
 
     @Transactional
     public ResultadoSincronizacion procesar(
@@ -74,7 +76,7 @@ class SincronizacionDeudasProcessor {
             List<GeoPagosContribuyenteDto> contribuyentes,
             LocalDate hoy, LocalDateTime inicio, OrigenDatos origen) {
 
-        Contexto ctx = new Contexto(hoy, LocalDateTime.now(), origen);
+        Contexto ctx = new Contexto(hoy, LocalDateTime.now(clock), origen);
 
         if (pendientes.isEmpty() && deudaRepository.countByPadronOrigenAndEstadoNot(origen, EstadoDeuda.CANCELADA) > 0) {
             // Protección: una respuesta vacía por error del origen cancelaría todas las deudas
@@ -97,7 +99,7 @@ class SincronizacionDeudasProcessor {
         sincronizacionContactosService.sincronizar(ctx.contactosPendientes);
 
         ResultadoSincronizacion resultado = new ResultadoSincronizacion(
-                inicio, LocalDateTime.now(), pendientes.size(), canceladas.size(),
+                inicio, LocalDateTime.now(clock), pendientes.size(), canceladas.size(),
                 ctx.deudasNuevas.size(), ctx.actualizadas, ctx.canceladas, ctx.omitidos,
                 List.copyOf(ctx.advertencias));
         log.info("Sincronización {}: {} pendientes, {} creadas, {} actualizadas, {} canceladas, {} omitidas",
@@ -109,12 +111,17 @@ class SincronizacionDeudasProcessor {
     private void procesarPendiente(GeoPagosFacturaPendienteDto fila, Contexto ctx) {
         String cm = texto(fila.cm());
         String numeroPadron = texto(fila.numeroPadron());
-        if (cm == null || numeroPadron == null) {
-            ctx.omitir("Registro sin CM o sin número de padrón");
+        if (cm == null) {
+            ctx.omitir("Registro sin CM");
             return;
         }
         if (!ctx.cmsProcesados.add(cm)) {
             ctx.omitir("CM " + cm + " repetido en la respuesta de " + ctx.origen.proveedor());
+            return;
+        }
+        // El CM figura en la foto: un dato incompleto no demuestra que su deuda se saldó.
+        if (numeroPadron == null) {
+            ctx.omitir("CM " + cm + ": sin número de padrón");
             return;
         }
         if (fila.importeDeuda() == null) {

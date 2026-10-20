@@ -13,6 +13,10 @@ import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.client.HttpServerErrorException;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.*;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -69,5 +73,21 @@ class SincronizacionGeoPatServiceTest {
         ((AtomicBoolean) ReflectionTestUtils.getField(service, "enCurso")).set(true);
         assertThatThrownBy(() -> service.sincronizar(OrigenDatos.SUCIVE)).isInstanceOf(OperacionEnCursoException.class);
         verifyNoInteractions(geoPatClient, geoPagosClient, processor);
+    }
+
+    @ParameterizedTest @EnumSource(OrigenDatos.class)
+    void falloEnCobrosObligatoriosNoProcesaPendientesYLiberaElBloqueo(OrigenDatos origen) {
+        var client = origen == OrigenDatos.SUCIVE ? geoPatClient : geoPagosClient;
+        when(client.obtenerFacturasPendientes()).thenReturn(new IntendenciaApiResponse<>(List.of(), null));
+        when(deudaRepository.ultimaSincronizacionPorOrigen(origen)).thenReturn(Optional.empty());
+        when(client.obtenerFacturasCanceladas(any(), any())).thenThrow(new HttpServerErrorException(HttpStatus.GATEWAY_TIMEOUT));
+
+        for (int intento=0; intento<2; intento++)
+            assertThatThrownBy(() -> service.sincronizar(origen)).isInstanceOf(IntegracionExternaException.class)
+                    .hasMessageContaining("504").hasMessageContaining(origen.proveedor());
+
+        verifyNoInteractions(processor);
+        if (origen == OrigenDatos.SUCIVE) verifyNoInteractions(geoPagosClient);
+        else verifyNoInteractions(geoPatClient);
     }
 }

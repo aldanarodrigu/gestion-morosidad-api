@@ -4,6 +4,8 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import com.intendencia.gestion_morosidad_api.integration.intendencia.common.FechaIntendenciaDeserializer;
+import tools.jackson.databind.annotation.JsonDeserialize;
 
 /**
  * Fila de GET /api/v1/utec/facturas/pendientes: deuda vencida agrupada por CM.
@@ -27,7 +29,7 @@ public record GeoPagosFacturaPendienteDto(
         @JsonProperty("CONVENIO") String convenio,
         @JsonProperty("TRIBUTOS_DEUDA") String tributosDeuda,
         @JsonProperty("IMPORTE_DEUDA") BigDecimal importeDeuda,
-        @JsonProperty("DEUDA_DESDE") LocalDate deudaDesde,
-        @JsonProperty("ULTIMO_VENCIMIENTO") LocalDate ultimoVencimiento,
+        @JsonProperty("DEUDA_DESDE") @JsonDeserialize(using = FechaIntendenciaDeserializer.class) LocalDate deudaDesde,
+        @JsonProperty("ULTIMO_VENCIMIENTO") @JsonDeserialize(using = FechaIntendenciaDeserializer.class) LocalDate ultimoVencimiento,
         @JsonProperty("ANIOS_DEUDA") String aniosDeuda) {
 }
