@@ -605,3 +605,56 @@ Pruebas específicas: `CarteraExportacionServiceTest` valida el archivo XLSX, to
 páginas, agrupación y tipos de celdas; `CarteraExportacionControllerTest` valida filtros,
 descarga y permisos. En el frontend, `CarteraExportacion.test.ts` y `carteraService.test.ts`
 comprueban solicitud, descarga y errores.
+
+
+### Consulta de facturas por padrón
+
+En el detalle del contribuyente, pestaña **Padrones**, **Ver facturas** despliega una
+consulta directa al proveedor correspondiente. No sincroniza, no guarda facturas y no
+modifica el saldo ni la deuda seleccionada para las gestiones.
+
+- `GET /api/deudas/{id}/facturas`: consulta autorizada para Administrador, Notificador y Analista.
+  El ID es el de la deuda local; el servidor obtiene su CM y origen, sin aceptar otro proveedor desde el navegador.
+- Filtros opcionales: `estado`, `vencida` y `incluirConvenios` (por defecto `true`).
+- GeoPagos: `/api/v1/utec/facturas`; SUCIVE: `/api/v1/utec/sucive/facturas`.
+  Estas consultas no usan paginación.
+- Se conservan los identificadores como texto y los montos con sus decimales originales.
+  Se muestran monedas, códigos de unidad desconocidos y montos por unidad sin sumarlos.
+- Puede incluir facturas pagadas, pendientes no vencidas y convenios históricos. No debe
+  interpretarse el total de esas facturas como el saldo pendiente sincronizado de la cartera.
+- Abrir el panel no cambia el padrón que se está gestionando. Cerrar cancela la petición del navegador.
+
+
+### Capturas reales de CM seleccionados
+
+**Comparar cartera** utiliza capturas persistentes en la base local. **Nueva captura**
+permite asignar un nombre y agregar uno o varios pares origen–CM existentes. Al guardar
+se copia el estado sincronizado, sin llamar a la API externa ni disparar una sincronización.
+
+- Migración `V202611031900__capturas_cartera.sql`: tablas `capturas_cartera` y
+  `captura_cuentas`. La primera guarda nombre, fecha/hora y autor autenticado; la segunda
+  guarda los datos del padrón y contribuyente, saldo pendiente, estado, segmento,
+  fecha de sincronización y último cobro informado.
+- Los datos históricos no tienen referencias a la deuda o padrón actual que permitan
+  sobrescribirlos al sincronizar. La captura completa se guarda en una transacción;
+  si un CM no existe o está repetido para el mismo origen, no se guarda parcialmente.
+- Se admiten cuentas sin deuda pendiente: se conserva el CM con saldo cero.
+  Eso no equivale a una confirmación de pago.
+- No hay un límite de cantidad de capturas. Cada operación acepta hasta 100 CM.
+- Administrador, Notificador y Analista pueden crear y consultar capturas.
+- Endpoints: `GET /api/capturas-cartera`, `GET /api/capturas-cartera/{id}` y
+  `POST /api/capturas-cartera` con `{nombre, cuentas: [{cm, origen}]}`.
+- La comparación solo utiliza cuentas incluidas en ambas capturas y que cumplen los
+  filtros. Una cuenta no incluida no se interpreta como pagada ni desaparecida.
+- Se compara el saldo agregado por CM, estado y segmento. No se conserva el detalle de
+  facturas ni un historial completo de cobros; el último cobro puede ser anterior a las
+  capturas y no representa la recaudación del período.
+- La fecha de creación es independiente de la última sincronización. Dos capturas sin
+  cambios de los datos locales pueden mostrar exactamente los mismos valores.
+- Reiniciar el backend aplica la migración mediante Flyway. Las capturas se conservan
+  tras reiniciar el frontend o backend; requieren conservar el volumen de PostgreSQL.
+
+`CapturaPersistenciaTest` se ejecuta solo con `CAPTURA_TEST_DB_URL`,
+`CAPTURA_TEST_DB_USER` y `CAPTURA_TEST_DB_PASSWORD` apuntando a una base PostgreSQL
+**desechable y aislada**, nunca a la base de desarrollo. Comprueba la migración,
+persistencia, conservación de valores históricos y rechazo de selecciones inválidas.
