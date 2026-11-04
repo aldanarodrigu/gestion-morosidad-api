@@ -658,3 +658,35 @@ se copia el estado sincronizado, sin llamar a la API externa ni disparar una sin
 `CAPTURA_TEST_DB_USER` y `CAPTURA_TEST_DB_PASSWORD` apuntando a una base PostgreSQL
 **desechable y aislada**, nunca a la base de desarrollo. Comprueba la migración,
 persistencia, conservación de valores históricos y rechazo de selecciones inválidas.
+
+
+### Reportes reales de cartera
+
+La pestaña **Reportes** consulta toda la cartera vigente en la base local: deudas no
+canceladas con saldo positivo, igual que el listado de cartera. No utiliza datos de
+prueba ni carga una página para calcular los totales en el navegador.
+
+- `GET /api/reportes/cartera`: indicadores de deuda total, contribuyentes distintos,
+  padrones y deudas; distribución por segmento y PadTipo; desglose por origen y PadTipo.
+- Filtros opcionales y combinables: `origen=INTENDENCIA|SUCIVE`, `tipoPadron` y
+  `segmento` (ID real del catálogo). Sin filtros se incluyen todos los registros vigentes.
+- Los contribuyentes se identifican por documento con espacios exteriores eliminados;
+  sin documento se usa su ID local. El total general cuenta personas distintas: no
+  necesariamente equivale a sumar los contribuyentes de cada categoría.
+- Los padrones sin tipo y deudas sin segmento se conservan en sus categorías respectivas.
+- Todos los cálculos se ejecutan en SQL dentro de una transacción de lectura consistente,
+  incluyendo durante una sincronización concurrente.
+- `GET /api/reportes/cartera/exportar`: descarga `reporte-cartera.xlsx` con los mismos
+  filtros, resumen, distribución por mora, por PadTipo, por origen y desglose por origen/PadTipo.
+  Importes, cantidades y porcentajes se guardan como valores numéricos.
+- Administrador, Notificador y Analista tienen acceso a consulta y exportación.
+- No requiere nuevas tablas ni migraciones. No llama a GeoPagos ni a SUCIVE.
+- La fecha de generación no es una fecha de sincronización. Para actualizar los datos
+  externos se debe ejecutar la sincronización correspondiente.
+- Evolución mensual, recaudación completa y clasificación urbano/rural siguen pendientes
+  de los datos y definiciones correspondientes. No se calculan a partir del último cobro.
+
+`ReportePersistenciaTest` prueba totales, filtros, valores faltantes y XLSX contra una
+base PostgreSQL desechable configurada con `REPORTE_TEST_DB_URL`,
+`REPORTE_TEST_DB_USER` y `REPORTE_TEST_DB_PASSWORD`. Nunca apuntar estas variables
+al entorno de desarrollo o producción. `ReporteControllerTest` cubre permisos.
