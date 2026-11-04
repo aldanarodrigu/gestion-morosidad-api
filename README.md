@@ -690,3 +690,22 @@ prueba ni carga una página para calcular los totales en el navegador.
 base PostgreSQL desechable configurada con `REPORTE_TEST_DB_URL`,
 `REPORTE_TEST_DB_USER` y `REPORTE_TEST_DB_PASSWORD`. Nunca apuntar estas variables
 al entorno de desarrollo o producción. `ReporteControllerTest` cubre permisos.
+
+
+### Catálogo paginado de tipos de tributo
+
+Configuración → Tipos de Tributo muestra 20 registros por página, con buscador por código
+(o parte del código) y descripción, filtro de origen y total de resultados. La búsqueda se
+realiza en el backend sobre el catálogo completo, sin limitarse a la página visible.
+
+- `GET /api/tributos/paginados?page=0&size=20&busqueda=...&origen=SUCIVE` devuelve
+  el formato `PaginaResponse` con contenido y totales. Los filtros son opcionales;
+  búsqueda por código/descripción sin distinguir mayúsculas y con espacios exteriores eliminados.
+- Mantiene un orden estable por origen, longitud del código, código e ID. Los códigos
+  se conservan como texto y no pierden ceros iniciales.
+- La búsqueda trata `%`, `_` y `!` como caracteres literales, no como comodines SQL.
+- `GET /api/tributos` sigue devolviendo el catálogo completo para consumidores existentes.
+- Los cambios de filtros vuelven a la primera página. Tras crear, editar o eliminar,
+  se recarga la página y sus totales; si desaparece la última página, se vuelve a una válida.
+- Crear/editar/eliminar conserva los permisos anteriores y el diálogo de confirmación.
+- No requiere una migración ni cambios de datos existentes.

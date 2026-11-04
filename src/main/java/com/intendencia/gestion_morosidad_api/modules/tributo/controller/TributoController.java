@@ -8,6 +8,11 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import com.intendencia.gestion_morosidad_api.modules.tributo.service.TributoService;
 import java.util.List;
+import com.intendencia.gestion_morosidad_api.shared.dto.PaginaResponse;
+import com.intendencia.gestion_morosidad_api.shared.enums.OrigenDatos;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
+import org.springframework.web.bind.annotation.RequestParam;
 import com.intendencia.gestion_morosidad_api.modules.tributo.dto.TributoRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -25,12 +30,21 @@ public class TributoController {
 
     private final TributoService tributoService;
 
-    /** Catálogo completo (pocos registros: sin paginación). Sirve, por ejemplo, para llenar el filtro por tributo. */
+    /** Catálogo completo para consumidores existentes. La administración usa /paginados. */
     @GetMapping
     @PreAuthorize("hasAnyRole('ADMINISTRADOR', 'NOTIFICADOR', 'ANALISTA')")
     public List<TributoResponse> listar() {
         return tributoService.listar();
     }
+    @GetMapping("/paginados")
+    @PreAuthorize("hasAnyRole('ADMINISTRADOR', 'NOTIFICADOR', 'ANALISTA')")
+    public PaginaResponse<TributoResponse> listarPaginados(
+            @RequestParam(required=false) String busqueda,
+            @RequestParam(required=false) OrigenDatos origen,
+            @PageableDefault(size=20) Pageable pageable) {
+        return tributoService.listarPaginados(busqueda,origen,pageable);
+    }
+
     @PutMapping("/{id}")
     @PreAuthorize("hasRole('ADMINISTRADOR')")
     public TributoResponse actualizarDescripcion(@PathVariable Long id,

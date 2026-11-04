@@ -5,6 +5,11 @@ import com.intendencia.gestion_morosidad_api.modules.tributo.dto.TributoUpdateRe
 import com.intendencia.gestion_morosidad_api.shared.exception.RecursoNoEncontradoException;
 import com.intendencia.gestion_morosidad_api.modules.tributo.repository.TributoRepository;
 import java.util.List;
+import java.util.Locale;
+import com.intendencia.gestion_morosidad_api.shared.dto.PaginaResponse;
+import com.intendencia.gestion_morosidad_api.shared.enums.OrigenDatos;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.PageRequest;
 import com.intendencia.gestion_morosidad_api.modules.tributo.dto.TributoRequest;
 import com.intendencia.gestion_morosidad_api.modules.tributo.entity.Tributo;
 import com.intendencia.gestion_morosidad_api.shared.exception.RecursoYaExisteException;
@@ -25,6 +30,16 @@ public class TributoService {
         return tributoRepository.findAllOrdenados().stream()
                 .map(TributoResponse::de)
                 .toList();
+    }
+    public PaginaResponse<TributoResponse> listarPaginados(
+            String busqueda, OrigenDatos origen,
+            Pageable pageable) {
+        String patron = busqueda == null || busqueda.isBlank() ? null : "%" + busqueda.trim().toLowerCase(Locale.ROOT)
+                .replace("!","!!").replace("%","!%").replace("_","!_") + "%";
+        // El catálogo conserva su orden estable por origen y código, incluso al cambiar de página.
+        var pagina = PageRequest.of(pageable.getPageNumber(),pageable.getPageSize());
+        return PaginaResponse.de(
+                tributoRepository.buscarCatalogo(patron,origen,pagina).map(TributoResponse::de));
     }
     @Transactional
     public TributoResponse actualizarDescripcion(Long id, TributoUpdateRequest request) {

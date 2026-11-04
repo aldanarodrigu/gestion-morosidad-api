@@ -1,6 +1,8 @@
 package com.intendencia.gestion_morosidad_api.modules.tributo.repository;
 
 import com.intendencia.gestion_morosidad_api.modules.tributo.entity.Tributo;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -8,6 +10,15 @@ import org.springframework.data.jpa.repository.Query;
 import com.intendencia.gestion_morosidad_api.shared.enums.OrigenDatos;
 
 public interface TributoRepository extends JpaRepository<Tributo, Long> {
+
+    @Query("""
+        select t from Tributo t
+        where (:origen is null or t.origen = :origen)
+          and (:busqueda is null or lower(t.codigo) like :busqueda escape '!'
+               or lower(coalesce(t.descripcion,'')) like :busqueda escape '!')
+        order by t.origen, length(t.codigo), t.codigo, t.id
+        """)
+    Page<Tributo> buscarCatalogo(String busqueda, OrigenDatos origen, Pageable pageable);
 
     /** Ordena como número ("801" antes que "3802") aunque el código sea texto. */
     @Query("select t from Tributo t order by t.origen, length(t.codigo), t.codigo")

@@ -113,4 +113,42 @@ class TributoAdministracionTest {
                 .andExpect(status().isNotFound());
         mvc.perform(get("/api/tributos")).andExpect(status().isUnauthorized());
     }
+    @Test void paginaTodoElCatalogoYBuscaMasAllaDeLaPaginaVisible() throws Exception {
+        long iniciales = tributos.count();
+        for(int i=0;i<45;i++) {
+            var t=new Tributo(); t.setCodigo(String.format("PAG-%02d",i));
+            t.setDescripcion(i==44 ? "Especial fuera de la primera página" : "Descripción"); tributos.save(t);
+        }
+        em.flush(); em.clear();
+        mvc.perform(get("/api/tributos/paginados").with(user("admin").roles("ADMINISTRADOR")).param("busqueda","PAG-").param("page","1"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.contenido.length()").value(20))
+            .andExpect(jsonPath("$.totalElementos").value(45)).andExpect(jsonPath("$.totalPaginas").value(3))
+            .andExpect(jsonPath("$.contenido[0].codigo").value("PAG-20"));
+        mvc.perform(get("/api/tributos/paginados").with(user("a").roles("ANALISTA")).param("busqueda","  ESPECIAL  "))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.totalElementos").value(1))
+            .andExpect(jsonPath("$.contenido[0].codigo").value("PAG-44"));
+        mvc.perform(get("/api/tributos").with(user("a").roles("ANALISTA")))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(iniciales + 45));
+    }
+    @ParameterizedTest @ValueSource(strings={"ADMINISTRADOR","ANALISTA","NOTIFICADOR"})
+    void filtraElMismoCodigoPorOrigenConDescripcionNula(String rol) throws Exception {
+        for(var origen:com.intendencia.gestion_morosidad_api.shared.enums.OrigenDatos.values()) {
+            var t=new Tributo(); t.setCodigo("00101");t.setOrigen(origen);tributos.save(t);
+        }
+        em.flush();em.clear();
+        mvc.perform(get("/api/tributos/paginados").with(user("a").roles(rol)).param("busqueda","00101").param("origen","SUCIVE"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.totalElementos").value(1))
+            .andExpect(jsonPath("$.contenido[0].codigo").value("00101"))
+            .andExpect(jsonPath("$.contenido[0].origen").value("SUCIVE"));
+    }
+    @Test void escapaComodinesYRetornaVacioSinInventarRegistros() throws Exception {
+        var t=new Tributo();t.setCodigo("LITERAL");t.setDescripcion("100% rural_area!");tributos.saveAndFlush(t);
+        var otro=new Tributo();otro.setCodigo("OTRO");tributos.saveAndFlush(otro);em.clear();
+        for(String busqueda:new String[]{"%","_","!"})
+            mvc.perform(get("/api/tributos/paginados").with(user("a").roles("ANALISTA")).param("busqueda",busqueda))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.totalElementos").value(1))
+                .andExpect(jsonPath("$.contenido[0].codigo").value("LITERAL"));
+        mvc.perform(get("/api/tributos/paginados").with(user("a").roles("ANALISTA")).param("busqueda","NO-EXISTE"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.totalElementos").value(0)).andExpect(jsonPath("$.contenido.length()").value(0));
+    }
 }
