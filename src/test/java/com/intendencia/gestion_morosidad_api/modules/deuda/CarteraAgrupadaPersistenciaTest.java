@@ -77,6 +77,54 @@ class CarteraAgrupadaPersistenciaTest {
         em.flush(); em.clear(); return mvc.perform(request).andExpect(status().isOk());
     }
 
+    @Test void buscaMatriculaEnTodaLaCarteraInclusoAgrupada() throws Exception {
+        var c = persona("Persona vehiculos", "MAT-DOC");
+        for (int i=0;i<23;i++) {
+            var d = deuda(c,"100",1,"2026-01-01");
+            d.getPadron().setOrigen(com.intendencia.gestion_morosidad_api.shared.enums.OrigenDatos.SUCIVE);
+            d.getPadron().setMatricula(i == 22 ? "SAA0123" : "SBB"+i);
+        }
+        for (String ruta : new String[]{"/api/deudas", "/api/deudas/agrupadas"}) {
+            consultar(get(ruta).param("contribuyente","saa0123").param("size","1"))
+                .andExpect(jsonPath("$.totalElementos").value(1));
+            consultar(get(ruta).param("contribuyente","SAA0123").param("origen","INTENDENCIA"))
+                .andExpect(jsonPath("$.totalElementos").value(0));
+        }
+        consultar(get("/api/deudas").param("contribuyente","SAA0123"))
+            .andExpect(jsonPath("$.contenido[0].padron.matricula").value("SAA0123"));
+    }
+
+    @Test void periodoExcluyeHistoricosEnCarteraAgrupacionReportesYExportacion() throws Exception {
+        var c=persona("Persona periodo","PERIODO");
+        var vieja=deuda(c,"500",1,"2011-01-01"); vieja.setEnPeriodoGestion(false); vieja.setAnioPeriodo(2013);
+        var vigente=deuda(c,"100",1,"2013-01-01"); vigente.setAnioPeriodo(2013);
+        for(String ruta:new String[]{"/api/deudas","/api/deudas/agrupadas"})
+            consultar(get(ruta)).andExpect(jsonPath("$.totalElementos").value(1));
+        consultar(get("/api/reportes/cartera")).andExpect(jsonPath("$.totales.importe").value(100));
+        consultar(get("/api/contribuyentes/id/"+c.getId()+"/deudas"))
+            .andExpect(jsonPath("$.length()").value(1)).andExpect(jsonPath("$[0].deudaDesde").value("2013-01-01"));
+        var bytes=consultar(get("/api/deudas/exportar")).andReturn().getResponse().getContentAsByteArray();
+        try(var x=org.apache.poi.ss.usermodel.WorkbookFactory.create(new java.io.ByteArrayInputStream(bytes))){
+            org.junit.jupiter.api.Assertions.assertEquals(1,x.getSheet("Cartera").getLastRowNum());
+        }
+        em.clear();org.junit.jupiter.api.Assertions.assertEquals(EstadoDeuda.PENDIENTE,deudas.findById(vieja.getId()).orElseThrow().getEstado());
+    }
+
+    @Test void administradorCambiaElPeriodoPersistidoYRechazaAnosFuturos() throws Exception {
+        mvc.perform(get("/api/sincronizaciones/configuracion").with(user("admin").roles("ADMINISTRADOR")))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.anioMinimo").value(2013));
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put("/api/sincronizaciones/configuracion")
+            .with(user("admin").roles("ADMINISTRADOR")).contentType("application/json").content("{\"anioMinimo\":2015}"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.anioMinimo").value(2015));
+        mvc.perform(get("/api/sincronizaciones/configuracion").with(user("admin").roles("ADMINISTRADOR")))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.anioMinimo").value(2015));
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put("/api/sincronizaciones/configuracion")
+            .with(user("admin").roles("ADMINISTRADOR")).contentType("application/json").content("{\"anioMinimo\":9999}"))
+            .andExpect(status().isBadRequest());
+        mvc.perform(get("/api/sincronizaciones/configuracion").with(user("admin").roles("ADMINISTRADOR")))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.anioMinimo").value(2015));
+    }
+
     @Test void agrupaPorDocumentoAunqueCambieElNombreYSeparaHomonimos() throws Exception {
         var c = persona("Ana Alvarez", "90000001");
         deuda(c, "100", 1, "2026-10-01"); deuda(c, "200", 3, "2024-01-01");

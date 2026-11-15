@@ -85,6 +85,7 @@ public class GestionService {
         var usuario = usuarioRepository.findByUsername(username)
                 .filter(u -> Boolean.TRUE.equals(u.getActivo()))
                 .orElseThrow(() -> new AccessDeniedException("Usuario no habilitado"));
+        if (!deuda.isEnPeriodoGestion()) throw new ReglaNegocioException("El padrón está fuera del período de gestión. Sincronizá el período correspondiente antes de registrar gestiones.");
         Gestion gestion = new Gestion();
         gestion.setUsuario(usuario);
 

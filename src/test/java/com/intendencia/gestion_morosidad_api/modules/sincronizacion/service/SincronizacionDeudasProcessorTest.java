@@ -38,6 +38,8 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
+import static org.mockito.Mockito.never;
+import static org.mockito.ArgumentMatchers.any;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -105,7 +107,7 @@ class SincronizacionDeudasProcessorTest {
         when(padronRepository.findAllByOrigen(OrigenDatos.INTENDENCIA)).thenReturn(List.of(padron));
         when(configuracionSegmentoService.reglasVigentes()).thenReturn(new ReglasSegmentacion(List.of()));
         GeoPagosFacturaPendienteDto fila = new GeoPagosFacturaPendienteDto(
-                123, 4567, null, null, "COM", null, "Ana Pérez", "1234567-8",
+                123, 4567, null, null, "COM", null, "Ana PÃƒÂ©rez", "1234567-8",
                 null, null, null, null, "NO", null, new BigDecimal("100.00"),
                 LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 1), "2026");
 
@@ -114,7 +116,7 @@ class SincronizacionDeudasProcessorTest {
 
         assertThat(resultado.deudasCreadas()).isEqualTo(1);
         assertThat(padron.getContribuyente()).isSameAs(contribuyente);
-        assertThat(contribuyente.getNombre()).isEqualTo("Ana Pérez");
+        assertThat(contribuyente.getNombre()).isEqualTo("Ana PÃƒÂ©rez");
         assertThat(contribuyente.getDocumento()).isEqualTo("1234567-8");
         verify(contribuyenteRepository).saveAll(argThat(nuevos -> !nuevos.iterator().hasNext()));
     }
@@ -123,7 +125,7 @@ class SincronizacionDeudasProcessorTest {
     void importaTelefonoCorreoYDomicilioDeFacturasPendientes() {
         Contribuyente contribuyente = new Contribuyente();
         contribuyente.setId(1L);
-        contribuyente.setNombre("Ana Pérez");
+        contribuyente.setNombre("Ana PÃƒÂ©rez");
         Padron padron = new Padron();
         padron.setCm("123");
         padron.setNumeroPadron("4567");
@@ -131,7 +133,7 @@ class SincronizacionDeudasProcessorTest {
         when(padronRepository.findAllByOrigen(OrigenDatos.INTENDENCIA)).thenReturn(List.of(padron));
         when(configuracionSegmentoService.reglasVigentes()).thenReturn(new ReglasSegmentacion(List.of()));
         GeoPagosFacturaPendienteDto fila = new GeoPagosFacturaPendienteDto(
-                123, 4567, null, null, "COM", null, "Ana Pérez", "1234567-8",
+                123, 4567, null, null, "COM", null, "Ana PÃƒÂ©rez", "1234567-8",
                 99123456, "ana@example.test", "Calle Central", "0010", "NO", null,
                 new BigDecimal("100.00"), LocalDate.of(2026, 9, 1),
                 LocalDate.of(2026, 9, 1), "2026");
@@ -157,15 +159,15 @@ class SincronizacionDeudasProcessorTest {
     @Test
     void cobroCompletaDocumentoSinDeudaPendiente() {
         Contribuyente contribuyente = new Contribuyente();
-        contribuyente.setNombre("Ana Pérez");
+        contribuyente.setNombre("Ana PÃƒÂ©rez");
         Padron padron = new Padron();
         padron.setCm("123");
         padron.setNumeroPadron("4567");
         padron.setContribuyente(contribuyente);
         when(padronRepository.findAllByOrigen(OrigenDatos.INTENDENCIA)).thenReturn(List.of(padron));
         GeoPagosFacturaCanceladaDto cobro = new GeoPagosFacturaCanceladaDto(
-                123, 4567, "Ana Pérez", "1234567-8", 9876,
-                LocalDate.of(2026, 9, 2), new BigDecimal("100.00"));
+                123, 4567, "Ana PÃƒÂ©rez", "1234567-8", 9876,
+                LocalDate.of(2026, 9, 2), new BigDecimal("100.00"), null);
 
         processor.procesar(List.of(), List.of(cobro), List.of(),
                 LocalDate.of(2026, 9, 24), LocalDateTime.of(2026, 9, 24, 12, 0));
@@ -177,7 +179,7 @@ class SincronizacionDeudasProcessorTest {
     @Test
     void cobroNoReemplazaElDocumentoDeUnaFacturaPendienteActual() {
         Contribuyente contribuyente = new Contribuyente();
-        contribuyente.setNombre("Ana Pérez");
+        contribuyente.setNombre("Ana PÃƒÂ©rez");
         Padron padron = new Padron();
         padron.setCm("123");
         padron.setNumeroPadron("4567");
@@ -185,34 +187,34 @@ class SincronizacionDeudasProcessorTest {
         when(padronRepository.findAllByOrigen(OrigenDatos.INTENDENCIA)).thenReturn(List.of(padron));
         when(configuracionSegmentoService.reglasVigentes()).thenReturn(new ReglasSegmentacion(List.of()));
         GeoPagosFacturaPendienteDto pendiente = new GeoPagosFacturaPendienteDto(
-                123, 4567, null, null, "COM", null, "Ana Pérez", "actual-123",
+                123, 4567, null, null, "COM", null, "Ana PÃƒÂ©rez", "actual-123",
                 null, null, null, null, "NO", null, new BigDecimal("100.00"),
                 LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 1), "2026");
         GeoPagosFacturaCanceladaDto cobro = new GeoPagosFacturaCanceladaDto(
                 123, 4567, "Persona anterior", "anterior-456", 9876,
-                LocalDate.of(2026, 9, 2), new BigDecimal("100.00"));
+                LocalDate.of(2026, 9, 2), new BigDecimal("100.00"), null);
 
         processor.procesar(List.of(pendiente), List.of(cobro), List.of(),
                 LocalDate.of(2026, 9, 24), LocalDateTime.of(2026, 9, 24, 12, 0));
 
-        assertThat(contribuyente.getNombre()).isEqualTo("Ana Pérez");
+        assertThat(contribuyente.getNombre()).isEqualTo("Ana PÃƒÂ©rez");
         assertThat(contribuyente.getDocumento()).isEqualTo("actual-123");
     }
 
     @Test
     void dtoDeCobroLeePersonaYDocumentoDelJson() throws Exception {
         GeoPagosFacturaCanceladaDto cobro = new ObjectMapper().readValue("""
-                {"CM":123,"NUMERO_PADRON":4567,"PERSONA":"Ana Pérez","DOCUMENTO":"1234567-8"}
+                {"CM":123,"NUMERO_PADRON":4567,"PERSONA":"Ana PÃƒÂ©rez","DOCUMENTO":"1234567-8"}
                 """, GeoPagosFacturaCanceladaDto.class);
 
-        assertThat(cobro.persona()).isEqualTo("Ana Pérez");
+        assertThat(cobro.persona()).isEqualTo("Ana PÃƒÂ©rez");
         assertThat(cobro.documento()).isEqualTo("1234567-8");
     }
 
     @Test
     void pendienteSinDocumentoConservaElAnteriorSiLaPersonaEsLaMisma() {
         Contribuyente contribuyente = new Contribuyente();
-        contribuyente.setNombre("Ana Pérez");
+        contribuyente.setNombre("Ana PÃƒÂ©rez");
         contribuyente.setDocumento("1234567-8");
         Padron padron = new Padron();
         padron.setCm("123");
@@ -221,7 +223,7 @@ class SincronizacionDeudasProcessorTest {
         when(padronRepository.findAllByOrigen(OrigenDatos.INTENDENCIA)).thenReturn(List.of(padron));
         when(configuracionSegmentoService.reglasVigentes()).thenReturn(new ReglasSegmentacion(List.of()));
         GeoPagosFacturaPendienteDto pendiente = new GeoPagosFacturaPendienteDto(
-                123, 4567, null, null, "COM", null, "Ana Pérez", null,
+                123, 4567, null, null, "COM", null, "Ana PÃƒÂ©rez", null,
                 null, null, null, null, "NO", null, new BigDecimal("100.00"),
                 LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 1), "2026");
 
@@ -234,7 +236,7 @@ class SincronizacionDeudasProcessorTest {
     @Test
     void cambioDeNombreSinDocumentoConservaIdentidadYNoSolicitaLimpiarContactos() {
         Contribuyente contribuyente = new Contribuyente();
-        contribuyente.setNombre("Ana Pérez");
+        contribuyente.setNombre("Ana PÃƒÂ©rez");
         contribuyente.setDocumento("1234567-8");
         Padron padron = new Padron();
         padron.setCm("123");
@@ -243,14 +245,14 @@ class SincronizacionDeudasProcessorTest {
         when(padronRepository.findAllByOrigen(OrigenDatos.INTENDENCIA)).thenReturn(List.of(padron));
         when(configuracionSegmentoService.reglasVigentes()).thenReturn(new ReglasSegmentacion(List.of()));
         GeoPagosFacturaPendienteDto pendiente = new GeoPagosFacturaPendienteDto(
-                123, 4567, null, null, "COM", null, "Luis Gómez", null,
+                123, 4567, null, null, "COM", null, "Luis GÃƒÂ³mez", null,
                 null, null, null, null, "NO", null, new BigDecimal("100.00"),
                 LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 1), "2026");
 
         processor.procesar(List.of(pendiente), List.of(), List.of(),
                 LocalDate.of(2026, 9, 24), LocalDateTime.of(2026, 9, 24, 12, 0));
 
-        assertThat(contribuyente.getNombre()).isEqualTo("Luis Gómez");
+        assertThat(contribuyente.getNombre()).isEqualTo("Luis GÃƒÂ³mez");
         assertThat(padron.getContribuyente()).isSameAs(contribuyente);
         assertThat(contribuyente.getDocumento()).isEqualTo("1234567-8");
         @SuppressWarnings({"unchecked", "rawtypes"})
@@ -267,11 +269,11 @@ class SincronizacionDeudasProcessorTest {
     void documentoDistintoMantienePersonasSeparadasAunqueTenganElMismoNombre(boolean yaExiste) {
         Contribuyente original = new Contribuyente();
         original.setId(1L);
-        original.setNombre("Ana Pérez");
+        original.setNombre("Ana PÃƒÂ©rez");
         original.setDocumento("1234567-8");
         Contribuyente otraPersona = new Contribuyente();
         otraPersona.setId(2L);
-        otraPersona.setNombre("Ana Pérez");
+        otraPersona.setNombre("Ana PÃƒÂ©rez");
         otraPersona.setDocumento("8765432-1");
         Padron padron = new Padron();
         padron.setCm("123"); padron.setNumeroPadron("4567"); padron.setContribuyente(original);
@@ -281,7 +283,7 @@ class SincronizacionDeudasProcessorTest {
         when(contribuyenteRepository.findAll()).thenReturn(yaExiste ? List.of(original, otraPersona) : List.of(original));
         when(configuracionSegmentoService.reglasVigentes()).thenReturn(new ReglasSegmentacion(List.of()));
         GeoPagosFacturaPendienteDto pendiente = new GeoPagosFacturaPendienteDto(
-                123, 4567, null, null, "COM", null, "Ana Pérez", "8765432-1",
+                123, 4567, null, null, "COM", null, "Ana PÃƒÂ©rez", "8765432-1",
                 null, null, null, null, "NO", null, new BigDecimal("100.00"),
                 LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 1), "2026");
 
@@ -300,7 +302,7 @@ class SincronizacionDeudasProcessorTest {
     @ValueSource(strings = {"1234567-8", "8765432-1"})
     void cobroHistoricoConservaDocumentoYSoloActualizaNombreSiNoContradiceLaIdentidad(String documentoCobro) {
         Contribuyente contribuyente = new Contribuyente();
-        contribuyente.setNombre("Ana Pérez"); contribuyente.setDocumento("1234567-8");
+        contribuyente.setNombre("Ana PÃƒÂ©rez"); contribuyente.setDocumento("1234567-8");
         Padron padron = new Padron();
         padron.setCm("123"); padron.setNumeroPadron("4567"); padron.setContribuyente(contribuyente);
         Deuda deuda = new Deuda();
@@ -310,16 +312,41 @@ class SincronizacionDeudasProcessorTest {
         when(configuracionSegmentoService.reglasVigentes()).thenReturn(new ReglasSegmentacion(List.of()));
         GeoPagosFacturaCanceladaDto cobro = new GeoPagosFacturaCanceladaDto(
                 123, 4567, "Nombre actualizado", documentoCobro, 9876,
-                LocalDate.of(2026, 9, 2), new BigDecimal("100.00"));
+                LocalDate.of(2026, 9, 2), new BigDecimal("100.00"), null);
 
         processor.procesar(List.of(), List.of(cobro), List.of(),
                 LocalDate.of(2026, 9, 24), LocalDateTime.of(2026, 9, 24, 12, 0));
 
         assertThat(contribuyente.getDocumento()).isEqualTo("1234567-8");
-        assertThat(contribuyente.getNombre()).isEqualTo("8765432-1".equals(documentoCobro) ? "Ana Pérez" : "Nombre actualizado");
+        assertThat(contribuyente.getNombre()).isEqualTo("8765432-1".equals(documentoCobro) ? "Ana PÃƒÂ©rez" : "Nombre actualizado");
         assertThat(padron.getContribuyente()).isSameAs(contribuyente);
         assertThat(deuda.getFechaUltimoCobro()).isEqualTo(LocalDate.of(2026, 9, 2));
         assertThat(deuda.getImporteUltimoCobro()).isEqualByComparingTo("100.00");
+    }
+
+    @ParameterizedTest
+    @NullSource
+    @ValueSource(strings = {"PAGO", "ANULADO POR ERROR", "NO INFORMADO", "  PAGO  "})
+    void conservaMotivoDelUltimoMovimientoSinInferirPago(String motivo) {
+        Deuda deuda = deudaExistente();
+        when(deudaRepository.findAllConPadronPorOrigen(OrigenDatos.INTENDENCIA)).thenReturn(List.of(deuda));
+        GeoPagosFacturaCanceladaDto cobro = new GeoPagosFacturaCanceladaDto(
+                123, 4567, null, null, 9876, LocalDate.of(2026,9,2), new BigDecimal("100.00"), motivo);
+        processor.procesar(List.of(), List.of(cobro), List.of(), LocalDate.of(2026,9,24), LocalDateTime.of(2026,9,24,12,0));
+        assertThat(deuda.getMotivoUltimoCobro()).isEqualTo(motivo == null ? null : motivo.trim());
+        assertThat(deuda.getImporteUltimoCobro()).isEqualByComparingTo("100.00");
+    }
+
+    @Test
+    void movimientoAntiguoNoReemplazaMotivoMasReciente() {
+        Deuda deuda = deudaExistente();
+        deuda.setFechaUltimoCobro(LocalDate.of(2026,9,20));
+        deuda.setMotivoUltimoCobro("ANULADO POR ERROR");
+        when(deudaRepository.findAllConPadronPorOrigen(OrigenDatos.INTENDENCIA)).thenReturn(List.of(deuda));
+        var cobro = new GeoPagosFacturaCanceladaDto(123,4567,null,null,9876,LocalDate.of(2026,9,2),new BigDecimal("100.00"),"PAGO");
+        processor.procesar(List.of(), List.of(cobro), List.of(), LocalDate.of(2026,9,24), LocalDateTime.of(2026,9,24,12,0));
+        assertThat(deuda.getMotivoUltimoCobro()).isEqualTo("ANULADO POR ERROR");
+        assertThat(deuda.getFechaUltimoCobro()).isEqualTo(LocalDate.of(2026,9,20));
     }
 
     @ParameterizedTest
@@ -371,11 +398,11 @@ class SincronizacionDeudasProcessorTest {
     void importaContactosDePersonasYDelUltimoGeoPagoSoloDePadronesConDeuda() {
         when(configuracionSegmentoService.reglasVigentes()).thenReturn(new ReglasSegmentacion(List.of()));
         GeoPagosFacturaPendienteDto pendiente = new GeoPagosFacturaPendienteDto(
-                123, 4567, null, null, "CIU", null, "Ana Pérez", "1234567-8",
+                123, 4567, null, null, "CIU", null, "Ana PÃƒÂ©rez", "1234567-8",
                 null, null, null, null, "NO", null, new BigDecimal("100.00"),
                 LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 1), "2026");
         GeoPagosContribuyenteDto conDeuda = new GeoPagosContribuyenteDto(
-                123, 4567, "CIU", null, null, null, "Ana Pérez", "099111222", "ana@personas.test",
+                123, 4567, "CIU", null, null, null, "Ana PÃƒÂ©rez", "099111222", "ana@personas.test",
                 "Otra Persona", "098333444", "pago@geopagos.test", "2026-09-02 14:30:00");
         GeoPagosContribuyenteDto sinDeuda = new GeoPagosContribuyenteDto(
                 999, 1, "CIU", null, null, null, "Sin Deuda", "091000000", null,
@@ -391,7 +418,7 @@ class SincronizacionDeudasProcessorTest {
         assertThat(contactos).filteredOn(d -> d.origen().equals(SincronizacionContactosService.PERSONAS))
                 .extracting(Dato::valor, Dato::esDeContribuyente)
                 .containsExactly(tuple("099111222", true), tuple("ana@personas.test", true));
-        // El último GeoPago puede ser de quien pagó: no se marca como dato del contribuyente
+        // El ÃƒÂºltimo GeoPago puede ser de quien pagÃƒÂ³: no se marca como dato del contribuyente
         assertThat(contactos).filteredOn(d -> d.origen().equals(SincronizacionContactosService.GEOPAGOS))
                 .extracting(Dato::valor, Dato::esDeContribuyente)
                 .containsExactly(tuple("098333444", false), tuple("pago@geopagos.test", false));
@@ -406,7 +433,7 @@ class SincronizacionDeudasProcessorTest {
                 null, null, null, null, "NO", null, new BigDecimal("100.00"),
                 LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 1), "2026");
         GeoPagosContribuyenteDto contribuyente = new GeoPagosContribuyenteDto(
-                123, 4567, "CIU", null, null, null, "Ana Pérez", null, null,
+                123, 4567, "CIU", null, null, null, "Ana PÃƒÂ©rez", null, null,
                 null, null, null, null);
 
         processor.procesar(List.of(pendiente), List.of(), List.of(contribuyente),
@@ -416,14 +443,14 @@ class SincronizacionDeudasProcessorTest {
         ArgumentCaptor<Iterable<Contribuyente>> captor = ArgumentCaptor.forClass((Class) Iterable.class);
         verify(contribuyenteRepository).saveAll(captor.capture());
         assertThat(captor.getValue()).singleElement()
-                .satisfies(c -> assertThat(c.getNombre()).isEqualTo("Ana Pérez"));
+                .satisfies(c -> assertThat(c.getNombre()).isEqualTo("Ana PÃƒÂ©rez"));
     }
 
     @Test
     void siContribuyentesNoEstaDisponibleGuardaLasDeudasYAvisa() {
         when(configuracionSegmentoService.reglasVigentes()).thenReturn(new ReglasSegmentacion(List.of()));
         GeoPagosFacturaPendienteDto pendiente = new GeoPagosFacturaPendienteDto(
-                123, 4567, null, null, "CIU", null, "Ana Pérez", null,
+                123, 4567, null, null, "CIU", null, "Ana PÃƒÂ©rez", null,
                 null, null, null, null, "NO", null, new BigDecimal("100.00"),
                 LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 1), "2026");
 
@@ -476,11 +503,123 @@ class SincronizacionDeudasProcessorTest {
     private com.intendencia.gestion_morosidad_api.modules.sincronizacion.dto.ResultadoSincronizacion
             procesarImporte(BigDecimal importe) {
         GeoPagosFacturaPendienteDto fila = new GeoPagosFacturaPendienteDto(
-                123, 4567, null, null, "COM", null, "Ana Pérez", null,
+                123, 4567, null, null, "COM", null, "Ana PÃƒÂ©rez", null,
                 null, null, null, null, "NO", null, importe,
                 LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 1), "2026");
         return processor.procesar(List.of(fila), List.of(), List.of(),
                 LocalDate.of(2026, 9, 24), LocalDateTime.of(2026, 9, 24, 12, 0));
+    }
+
+    @ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings = {"20.00", "200.00", "0.00"})
+    void guardaDesgloseSinDescontarCreditoOtraVez(String saldo) {
+        when(configuracionSegmentoService.reglasVigentes()).thenReturn(new ReglasSegmentacion(List.of()));
+        var fila = new GeoPagosFacturaPendienteDto(123,4567,null,null,"COM",null,"Persona",null,
+                null,null,null,null,"NO",null,new BigDecimal("80.00"),LocalDate.of(2026,9,1),null,"2026",
+                new BigDecimal("100.00"),new BigDecimal(saldo),new BigDecimal("20.00"));
+        processor.procesar(List.of(fila),List.of(),List.of(),LocalDate.of(2026,9,24),LocalDateTime.of(2026,9,24,12,0));
+        @SuppressWarnings({"unchecked", "rawtypes"})
+        ArgumentCaptor<Iterable<Deuda>> captor = ArgumentCaptor.forClass((Class) Iterable.class);
+        verify(deudaRepository).saveAll(captor.capture());
+        assertThat(captor.getValue()).singleElement().satisfies(d -> {
+            assertThat(d.getImporte()).isEqualByComparingTo("80.00");
+            assertThat(d.getDeudaFacturas()).isEqualByComparingTo("100.00");
+            assertThat(d.getSaldoAFavor()).isEqualByComparingTo(saldo);
+            assertThat(d.getCreditoDescontado()).isEqualByComparingTo("20.00");
+            var persona = new Contribuyente(); persona.setId(1L); d.getPadron().setContribuyente(persona);
+            var response = com.intendencia.gestion_morosidad_api.modules.deuda.mapper.DeudaMapper.toResponse(d,LocalDate.of(2026,9,24),List.of());
+            assertThat(response.deudaFacturas()).isEqualByComparingTo("100.00");
+            assertThat(response.saldoAFavor()).isEqualByComparingTo(saldo);
+            assertThat(response.creditoDescontado()).isEqualByComparingTo("20.00");
+        });
+    }
+
+    @ParameterizedTest
+    @org.junit.jupiter.params.provider.EnumSource(OrigenDatos.class)
+    void matriculaSeGuardaSoloParaSucive(OrigenDatos origen) {
+        when(configuracionSegmentoService.reglasVigentes()).thenReturn(new ReglasSegmentacion(List.of()));
+        var fila = new GeoPagosFacturaPendienteDto(123,4567,null,null,"PAT",null,"Persona",null,
+                null,null,null,null,"NO",null,new BigDecimal("80.00"),LocalDate.of(2026,9,1),null,"2026",
+                null,null,null,"  SAA0123  ");
+        processor.procesar(List.of(fila),List.of(),List.of(),LocalDate.of(2026,9,24),LocalDateTime.of(2026,9,24,12,0),origen);
+        @SuppressWarnings({"unchecked", "rawtypes"})
+        ArgumentCaptor<Iterable<Padron>> captor = ArgumentCaptor.forClass((Class) Iterable.class);
+        verify(padronRepository).saveAll(captor.capture());
+        assertThat(captor.getValue()).singleElement().satisfies(p -> {
+            assertThat(p.getMatricula()).isEqualTo(origen == OrigenDatos.SUCIVE ? "SAA0123" : null);
+            assertThat(com.intendencia.gestion_morosidad_api.modules.padron.dto.PadronResponse.de(p).matricula()).isEqualTo(p.getMatricula());
+        });
+    }
+
+    @ParameterizedTest
+    @org.junit.jupiter.params.provider.EnumSource(OrigenDatos.class)
+    void conservaContadoresYAnosDeFuenteSinInferirIntervalosContinuos(OrigenDatos origen) {
+        when(configuracionSegmentoService.reglasVigentes()).thenReturn(new ReglasSegmentacion(List.of()));
+        var fila = new GeoPagosFacturaPendienteDto(123,4567,null,null,"COM",null,"Persona",null,
+                null,null,null,null,"NO",null,new BigDecimal("80.00"),LocalDate.of(2026,9,1),null,"2021, 2026",
+                null,null,null,null,5,3,2021,2026,2);
+        processor.procesar(List.of(fila),List.of(),List.of(),LocalDate.of(2026,9,24),LocalDateTime.of(2026,9,24,12,0),origen);
+        @SuppressWarnings({"unchecked", "rawtypes"})
+        ArgumentCaptor<Iterable<Deuda>> captor = ArgumentCaptor.forClass((Class) Iterable.class);
+        verify(deudaRepository).saveAll(captor.capture());
+        assertThat(captor.getValue()).singleElement().satisfies(d -> {
+            assertThat(d.getCantidadFacturasVencidas()).isEqualTo(5);
+            assertThat(d.getCantidadFacturasConDeuda()).isEqualTo(3);
+            assertThat(d.getAnioDesde()).isEqualTo(2021);
+            assertThat(d.getAnioHasta()).isEqualTo(2026);
+            assertThat(d.getCantidadAniosDeuda()).isEqualTo(2);
+            assertThat(d.getImporte()).isEqualByComparingTo("80.00");
+            var response = com.intendencia.gestion_morosidad_api.modules.deuda.mapper.DeudaMapper.toResponse(d,LocalDate.of(2026,9,24),List.of());
+            assertThat(response.cantidadFacturasVencidas()).isEqualTo(5);
+            assertThat(response.cantidadFacturasConDeuda()).isEqualTo(3);
+            assertThat(response.cantidadAniosDeuda()).isEqualTo(2);
+            assertThat(response.aniosDeuda()).isEqualTo("2021, 2026");
+        });
+    }
+
+    @Test void periodoFiltradoExcluyeSinCancelarNiBorrarElHistorial() {
+        Deuda antigua = deudaExistente(); antigua.setDeudaDesde(LocalDate.of(2011,9,24));
+        when(deudaRepository.findAllConPadronPorOrigen(OrigenDatos.INTENDENCIA)).thenReturn(List.of(antigua));
+        when(configuracionSegmentoService.reglasVigentes()).thenReturn(new ReglasSegmentacion(List.of()));
+        var resultado = processor.procesar(List.of(),List.of(),List.of(),LocalDate.of(2026,9,24),LocalDateTime.of(2026,9,24,12,0),OrigenDatos.INTENDENCIA,2013);
+        assertThat(antigua.isEnPeriodoGestion()).isFalse();
+        assertThat(antigua.getEstado()).isEqualTo(EstadoDeuda.EN_GESTION);
+        assertThat(antigua.getImporte()).isEqualByComparingTo("100.00");
+        assertThat(antigua.getAnioPeriodo()).isEqualTo(2013);
+        assertThat(resultado.deudasCanceladas()).isZero();
+        verify(deudaRepository,never()).delete(any(Deuda.class));
+    }
+
+    @ParameterizedTest @ValueSource(strings={"2013-01-01","2014-12-31"})
+    void periodoIncluyePrimeroDeEneroYReactivaDeudaExistente(String fecha) {
+        Deuda d = deudaExistente(); d.setEnPeriodoGestion(false);
+        when(deudaRepository.findAllConPadronPorOrigen(OrigenDatos.INTENDENCIA)).thenReturn(List.of(d));
+        when(padronRepository.findAllByOrigen(OrigenDatos.INTENDENCIA)).thenReturn(List.of(d.getPadron()));
+        when(configuracionSegmentoService.reglasVigentes()).thenReturn(new ReglasSegmentacion(List.of()));
+        var fila=new GeoPagosFacturaPendienteDto(123,4567,null,null,"COM",null,"Persona",null,null,null,null,null,"NO",null,new BigDecimal("80.00"),LocalDate.parse(fecha),LocalDate.of(2026,9,1),"2013, 2026");
+        processor.procesar(List.of(fila),List.of(),List.of(),LocalDate.of(2026,9,24),LocalDateTime.of(2026,9,24,12,0),OrigenDatos.INTENDENCIA,2013);
+        assertThat(d.isEnPeriodoGestion()).isTrue(); assertThat(d.getAnioPeriodo()).isEqualTo(2013);
+        assertThat(d.getDeudaDesde()).isEqualTo(LocalDate.parse(fecha));
+        assertThat(d.getEstado()).isEqualTo(EstadoDeuda.EN_GESTION);
+    }
+
+    @ParameterizedTest @ValueSource(strings={"2012-12-31","2026-09-24"})
+    void rechazaRespuestaQueNoRespetaLosLimitesSinAplicarCambios(String fecha) {
+        Deuda d=deudaExistente();
+        when(deudaRepository.findAllConPadronPorOrigen(OrigenDatos.INTENDENCIA)).thenReturn(List.of(d));
+        when(configuracionSegmentoService.reglasVigentes()).thenReturn(new ReglasSegmentacion(List.of()));
+        var fila=new GeoPagosFacturaPendienteDto(123,4567,null,null,"COM",null,"Persona",null,null,null,null,null,"NO",null,new BigDecimal("80.00"),LocalDate.parse(fecha),null,"2012");
+        org.assertj.core.api.Assertions.assertThatThrownBy(()->processor.procesar(List.of(fila),List.of(),List.of(),LocalDate.of(2026,9,24),LocalDateTime.of(2026,9,24,12,0),OrigenDatos.INTENDENCIA,2013)).isInstanceOf(com.intendencia.gestion_morosidad_api.shared.exception.IntegracionExternaException.class);
+        assertThat(d.getFechaSincronizacion()).isNull(); assertThat(d.isEnPeriodoGestion()).isTrue();
+        verify(deudaRepository,never()).saveAll(any());
+    }
+
+    @Test void datosIncompletosDelPeriodoNoConservanUnSaldoAnteriorComoVigente() {
+        when(configuracionSegmentoService.reglasVigentes()).thenReturn(new ReglasSegmentacion(List.of()));
+        var fila = new GeoPagosFacturaPendienteDto(123,null,null,null,"COM",null,"Persona",null,null,null,null,null,"NO",null,new BigDecimal("80.00"),LocalDate.of(2013,1,1),null,"2013");
+        org.assertj.core.api.Assertions.assertThatThrownBy(()->processor.procesar(List.of(fila),List.of(),List.of(),LocalDate.of(2026,9,24),LocalDateTime.of(2026,9,24,12,0),OrigenDatos.INTENDENCIA,2013))
+            .isInstanceOf(com.intendencia.gestion_morosidad_api.shared.exception.IntegracionExternaException.class).hasMessageContaining("incompletos");
+        verify(deudaRepository,never()).saveAll(any());
     }
 
     private static Deuda deudaExistente() {

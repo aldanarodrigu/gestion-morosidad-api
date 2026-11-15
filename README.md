@@ -525,8 +525,8 @@ la cartera individual y agrupada, incluyendo sus totales y paginacion.
 - Las consultas por CM de contribuyentes, contactos y deudas aceptan `?origen=SUCIVE`;
   omitirlo conserva Intendencia. Las consultas por ID interno son univocas entre origenes.
 
-GeoPat utiliza la misma URL base y Basic Auth, con las rutas `/api/v1/utec/geopat/contribuyentes`,
-`/api/v1/utec/geopat/facturas/pendientes` y `/api/v1/utec/geopat/facturas/canceladas` del anexo.
+SUCIVE utiliza la misma URL base y Basic Auth, con las rutas `/api/v1/utec/sucive/contribuyentes`,
+`/api/v1/utec/sucive/facturas/pendientes` y `/api/v1/utec/sucive/facturas/canceladas` de la documentación vigente.
 Los DTO de facturas se comparten porque los campos y formatos documentados coinciden;
 el cliente GeoPat normaliza contribuyentes sin inventar los campos de transacciones GeoPagos.
 
@@ -709,3 +709,105 @@ realiza en el backend sobre el catálogo completo, sin limitarse a la página vi
   se recarga la página y sus totales; si desaparece la última página, se vuelve a una válida.
 - Crear/editar/eliminar conserva los permisos anteriores y el diálogo de confirmación.
 - No requiere una migración ni cambios de datos existentes.
+
+
+### Consulta de convenios pendientes
+
+La pestaña **Convenios** consulta directamente las fuentes externas mediante `GET /api/convenios` (autenticación requerida; Administrador, Notificador y Analista).
+
+Parámetros opcionales: `origen=INTENDENCIA|SUCIVE` (Intendencia por defecto), `pagina=1`, `tamanio=20` (máximo 100), `cm`, `documento`, `nombre`, `desde` y `hasta` (AAAA-MM-DD). Las páginas comienzan en 1. `desde` incluye el vencimiento y `hasta` lo excluye; seleccionan deuda actualmente pendiente, no una cartera histórica. La respuesta conserva `data` y `meta` de la página externa.
+
+Incluye número de convenio, CM, contribuyente, cuotas vencidas/totales, matrícula cuando existe y desglose de deuda, saldo a favor y crédito descontado. Los importes se conservan como texto decimal de la fuente, sin convertir ni asumir moneda. Las cuotas vencidas excluyen la entrega inicial; el importe puede incluirla.
+
+Esta primera versión es de consulta: no importa convenios a la base local, no registra gestiones de convenios y no suma estos saldos a cartera/reportes, evitando duplicarlos con registros existentes. No requiere migración. Los errores externos se comunican y permiten reintentar desde la pantalla.
+
+
+### Motivo del último movimiento
+
+La sincronización de ambos orígenes recibe `MOTIVO_ANULACION` de facturas canceladas y guarda `motivoUltimoCobro` junto a fecha e importe. Solo el valor `PAGO` identifica el pago informado por la fuente; otros textos son motivos de anulación y un valor ausente permanece sin informar. El motivo no se usa para deducir la cancelación de la deuda: la conciliación sigue basándose en la consulta completa de pendientes.
+
+La respuesta de deudas expone el motivo y las nuevas capturas lo copian para conservar su valor histórico. Comparar cartera muestra **Último movimiento informado** y su motivo. Las capturas anteriores no se reconstruyen ni se atribuyen automáticamente a pagos.
+
+La migración `V202611112100__motivo_ultimo_cobro.sql` agrega columnas opcionales a deuda y captura_cuentas; Flyway la aplica al iniciar el backend. Los datos anteriores quedan sin motivo hasta que corresponda actualizarlos mediante sincronización (las capturas anteriores permanecen sin modificar). La sincronización consulta un intervalo de cobros, no reconstruye todo el historial.
+
+
+### Desglose del saldo por padrón
+
+La sincronización recibe `DEUDA_FACTURAS`, `SALDO_A_FAVOR` y `CREDITO_DESCONTADO` de ambas fuentes y los guarda como `deudaFacturas`, `saldoAFavor` y `creditoDescontado`. `importe` sigue siendo la deuda neta informada en `IMPORTE_DEUDA`: no se recalcula ni se descuenta el crédito nuevamente. Un campo ausente permanece null; cero es un valor informado.
+
+En el detalle del contribuyente, pestaña **Padrones**, cada fila ofrece **Desglose del saldo**, con estos tres valores y la deuda neta, sin agregar columnas al listado de cartera. Los valores nuevos se muestran sin asumir una moneda.
+
+Las nuevas capturas conservan el desglose de las deudas pendientes. Para cuentas sin deuda pendiente no se copia un desglose potencialmente antiguo. Las capturas y deudas existentes quedan con valores sin informar hasta que corresponda sincronizar (las capturas anteriores no se reconstruyen).
+
+La migración aditiva `V202611112200__desglose_saldo_deuda.sql` incorpora columnas opcionales a deuda y captura_cuentas. Se aplica con Flyway al iniciar el backend; no borra datos.
+
+
+### Matrícula de SUCIVE
+
+La sincronización recibe `MATRICULA` de pendientes de SUCIVE y la guarda como texto opcional en el padrón. La consulta de contribuyentes de SUCIVE completa matrículas faltantes. Un valor ausente no borra una matrícula existente. No se usa como identificador: se conserva la separación por origen y CM.
+
+La matrícula se expone en `padron.matricula`, se muestra junto al número de padrón en cartera y en la pestaña Padrones (también en el detalle agrupado), y se incluye como columna Matrícula en la hoja Cartera del Excel. El buscador general acepta matrícula, sin distinguir mayúsculas, desde el backend y sobre toda la cartera, incluida la agrupación y la paginación.
+
+Flyway aplica `V202611112300__matricula_padron.sql` al iniciar el backend. Se necesita una sincronización para completar las matrículas de los padrones existentes.
+
+
+### Personas vinculadas al padrón
+
+En el detalle del contribuyente, pestaña **Padrones**, cada fila ofrece **Ver personas vinculadas**. El panel consulta el historial externo al abrirse y separa relaciones actuales (`ACTIVO`) de históricas (`NO ACTIVO - SOLO HISTORICO`). Conserva una fila por relación/padrón, aunque se repita el documento; para convenios puede incluir padrones de origen. Incluye nombre, documento, código de contribuyente, relación, situación y contactos disponibles actualmente en la fuente.
+
+`GET /api/deudas/{id}/historial-contribuyentes` requiere autenticación y admite Administrador, Notificador y Analista. Resuelve el CM y el origen desde la deuda local y consulta `/api/v1/utec/contribuyentes/historial` o `/api/v1/utec/sucive/contribuyentes/historial`. Devuelve `data` y `meta.total`, sin paginación. Rechaza respuestas incompletas y comunica errores de la fuente; el panel permite reintentar y cancela consultas al cerrarse.
+
+Es una consulta informativa: no modifica titulares, documentos, contactos ni gestiones locales. No requiere migración ni sincronización. Las relaciones no acreditan por sí solas titularidad u obligación de pago.
+
+
+### Facturas y años de deuda
+
+Pendientes de ambos orígenes incorpora `CANT_FACT_VENC`, `CANT_FACT_CON_DEUDA`, `ANIO_DESDE`, `ANIO_HASTA` y `CANT_ANIOS_DEUDA`. Se guardan/exponen como `cantidadFacturasVencidas`, `cantidadFacturasConDeuda`, `anioDesde`, `anioHasta` y `cantidadAniosDeuda`, junto al listado existente `aniosDeuda`.
+
+En **Detalle del contribuyente → Padrones → Facturas y años de deuda** se muestran sin consultas externas adicionales. Las facturas vencidas consideradas pueden incluir importes cero, negativos o desconocidos; las facturas con deuda son las de importe positivo antes de aplicar el saldo a favor. Los años son de facturación, no necesariamente años de vencimiento; no se infiere que todos los años del intervalo tengan deuda. Un campo ausente queda sin informar, distinto de cero.
+
+El Excel de cartera incluye estos cinco campos y la lista de años, tanto en exportación normal como agrupada. Las nuevas capturas copian los datos de las cuentas con deuda pendiente; las capturas anteriores no se reconstruyen. No se suman contadores a los reportes agregados.
+
+La migración `V202611120000__facturas_anios_deuda.sql` agrega columnas opcionales a deuda/captura_cuentas. Se aplica con Flyway al iniciar; la siguiente sincronización completa las deudas existentes con los datos recibidos.
+
+
+### Período de sincronización y ejecución manual
+
+En **Configuración → Sincronización**, Administrador guarda el año mínimo (2013 inicialmente) e inicia la sincronización de Intendencia o SUCIVE. La configuración se persiste en la base y se utiliza tanto manualmente como en el proceso automático. Cambiar el año no cambia los saldos hasta completar una nueva sincronización de cada origen.
+
+El período corresponde a **vencimientos** desde el 01/01 del año elegido, incluido, hasta el día actual, excluido (`fecha_inicio`/`fecha_corte`). No equivale a filtrar por año de facturación. Se recorren todas las páginas con `include_total=0` y `meta.has_more`, validando páginas, tamaños, límites e identificadores. El COUNT externo se omite para evitar su coste, y la importación solo se aplica una vez completa la descarga. Una respuesta con vencimientos fuera de los límites se rechaza.
+
+Los CM ausentes en la consulta filtrada quedan con `enPeriodoGestion=false`, conservando identidad, importe anterior, estado y gestiones. No se interpreta su ausencia como pago ni cancelación. Cartera, agrupación, detalle habitual, reportes y exportaciones excluyen esos registros; siguen disponibles por ID para consulta histórica. Las nuevas capturas reflejan saldo cero y `FUERA_PERIODO` para una cuenta excluida. Si vuelve a aparecer al ampliar el período, se reactiva usando los datos de la fuente. `anioPeriodo` registra el año aplicado a cada deuda durante la última sincronización de su origen.
+
+Endpoints de Administrador:
+
+- `GET /api/sincronizaciones/configuracion`: año mínimo guardado.
+- `PUT /api/sincronizaciones/configuracion`: JSON `{"anioMinimo":2013}` (1900 a año actual).
+- `POST /api/sincronizaciones/ejecucion?origen=INTENDENCIA|SUCIVE`: inicia en segundo plano, HTTP 202.
+- `GET /api/sincronizaciones/ejecucion`: estado de la última ejecución manual de esta instancia (204 si no hubo ninguna). El estado de seguimiento se reinicia al reiniciar el backend; los datos y configuración quedan persistidos.
+- `POST /api/sincronizaciones/deudas?origen=...`: conserva la ejecución síncrona existente y usa el año guardado.
+
+La pestaña permite consultar el avance aunque se cierre y vuelva a abrir. No inicia trabajos simultáneos ni permite modificar el período durante una ejecución. Cada origen se concilia en su propia transacción; un fallo conserva su base anterior y no demuestra que ya esté actualizado al nuevo año. No reintentar mientras figure en curso.
+
+La migración `V202611121000__configuracion_periodo_sincronizacion.sql` crea la configuración y agrega campos de alcance sin borrar datos. No elimina facturas históricas de consultas informativas directas, convenios consultados en línea ni capturas anteriores.
+
+
+La descarga reintenta una misma página hasta tres veces ante HTTP 502/503/504 o fallos de conexión, con una espera breve entre intentos. No reintenta errores de validación y no importa resultados parciales si se agotan los intentos.
+
+Validación real del 11/11/2026: Intendencia quedó sincronizada desde 2013; SUCIVE no pudo completarse por 504 de la fuente en páginas avanzadas. Sus datos anteriores se conservaron. Ver [informe de validación](docs/sincronizacion-2013-validacion-2026-11-11.md).
+
+
+### Representación del progreso de sincronización
+
+Configuración → Sincronización muestra las etapas **Deudas → Cobros → Contactos → Guardado**, alimentadas por `progreso` en `GET /api/sincronizaciones/ejecucion`. El backend publica las páginas y registros únicamente después de validar cada página; mientras espera la siguiente informa `paginaActual`, y ante errores transitorios informa el número de intento (hasta tres), conservando los contadores validados.
+
+Cuando la fuente informa totales, la pantalla calcula porcentaje y registros/páginas restantes **de esa descarga**, no de todo el proceso. Para pendientes sin COUNT, la barra es indeterminada y los totales permanecen null; no se inventan porcentajes ni tiempos de finalización. Los contadores se reinician al cambiar de consulta. Durante el guardado se espera la confirmación de la transacción antes de marcar la sincronización completada. Si falla, se detiene la animación y se conserva el último avance junto al mensaje de error.
+
+El seguimiento se aísla por hilo y se libera al finalizar, para no mezclar tareas manuales con otras ejecuciones. Consultar el progreso no ejecuta importaciones ni modifica datos. No requiere migración ni altera el período configurado.
+
+
+### Cancelar una sincronización manual
+
+Administrador puede solicitar `POST /api/sincronizaciones/ejecucion/cancelar`, también disponible como **Cancelar sincronización** en la pestaña. La tarea pasa a `CANCELANDO` y conserva bloqueados el inicio y el cambio de año hasta que el trabajador termina. Si una petición externa sigue activa, se espera su respuesta o timeout; después se descarta lo descargado y se confirma `CANCELADA`, sin procesar ni guardar deudas. No se interrumpe el hilo ni se libera prematuramente el bloqueo.
+
+La cancelación y el comienzo de **Guardado** se coordinan atómicamente. Una vez iniciada esa etapa, el botón se deshabilita y el backend rechaza cancelar; se deja finalizar la transacción para evitar anunciar una cancelación después de confirmar cambios. La cancelación es idempotente si la tarea ya terminó. No cancela trabajos automáticos ni los iniciados mediante el endpoint síncrono anterior.

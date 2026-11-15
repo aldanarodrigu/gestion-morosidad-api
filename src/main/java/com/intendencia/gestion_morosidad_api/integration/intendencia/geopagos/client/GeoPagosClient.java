@@ -13,6 +13,11 @@ import org.springframework.stereotype.Component;
 public class GeoPagosClient implements IntendenciaClient {
     private final IntendenciaPaginador paginador;
 
+    @Override public IntendenciaApiResponse<GeoPagosFacturaPendienteDto> obtenerFacturasPendientes(LocalDate desde, LocalDate hasta) {
+        return paginador.obtenerSinTotal("/api/v1/utec/facturas/pendientes", Map.of("fecha_inicio", desde.toString(), "fecha_corte", hasta.toString()),
+                new ParameterizedTypeReference<>() {}, GeoPagosFacturaPendienteDto::cm);
+    }
+
     @Override public IntendenciaApiResponse<GeoPagosContribuyenteDto> obtenerContribuyentes() {
         return paginador.obtenerTodo("/api/v1/utec/contribuyentes-geopagos", Map.of(),
                 new ParameterizedTypeReference<>() {}, GeoPagosContribuyenteDto::cm);

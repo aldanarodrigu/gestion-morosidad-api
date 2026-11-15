@@ -7,7 +7,7 @@ import java.time.LocalDate;
 import com.intendencia.gestion_morosidad_api.integration.intendencia.common.FechaIntendenciaDeserializer;
 import tools.jackson.databind.annotation.JsonDeserialize;
 
-/** Fila de GET /api/v1/utec/facturas/canceladas: último cobro de cada CM dentro del intervalo pedido. */
+/** Fila de GET /api/v1/utec/facturas/canceladas: Ãºltimo cobro de cada CM dentro del intervalo pedido. */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record GeoPagosFacturaCanceladaDto(
         @JsonProperty("CM") Object cm,
@@ -16,5 +16,6 @@ public record GeoPagosFacturaCanceladaDto(
         @JsonProperty("DOCUMENTO") Object documento,
         @JsonProperty("NUMERO_COBRO") Object numeroCobro,
         @JsonProperty("FECHA_COBRO") @JsonDeserialize(using = FechaIntendenciaDeserializer.class) LocalDate fechaCobro,
-        @JsonProperty("IMPORTE_TOTAL") BigDecimal importeTotal) {
+        @JsonProperty("IMPORTE_TOTAL") BigDecimal importeTotal,
+        @JsonProperty("MOTIVO_ANULACION") String motivoAnulacion) {
 }

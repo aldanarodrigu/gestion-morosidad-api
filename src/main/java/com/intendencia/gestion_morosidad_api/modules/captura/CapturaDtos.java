@@ -14,5 +14,11 @@ public final class CapturaDtos {
     public record Detalle(Long id, String nombre, LocalDateTime fecha, String usuario, List<EstadoCuenta> cuentas) {}
     public record EstadoCuenta(String cm, OrigenDatos origen, String numeroPadron, String tipoPadron,
         String nombre, String documento, BigDecimal importe, String estado, String segmento,
-        LocalDateTime fechaSincronizacion, LocalDate fechaUltimoCobro, BigDecimal importeUltimoCobro) {}
+        LocalDateTime fechaSincronizacion, LocalDate fechaUltimoCobro, BigDecimal importeUltimoCobro, String motivoUltimoCobro, BigDecimal deudaFacturas, BigDecimal saldoAFavor, BigDecimal creditoDescontado, String aniosDeuda, Integer cantidadFacturasVencidas, Integer cantidadFacturasConDeuda, Integer anioDesde, Integer anioHasta, Integer cantidadAniosDeuda) {
+        public EstadoCuenta(String cm, OrigenDatos origen, String numeroPadron, String tipoPadron,
+            String nombre, String documento, BigDecimal importe, String estado, String segmento,
+            LocalDateTime fechaSincronizacion, LocalDate fechaUltimoCobro, BigDecimal importeUltimoCobro) {
+            this(cm,origen,numeroPadron,tipoPadron,nombre,documento,importe,estado,segmento,fechaSincronizacion,fechaUltimoCobro,importeUltimoCobro,null,null,null,null,null,null,null,null,null,null);
+        }
+    }
 }

@@ -24,7 +24,7 @@ public class CarteraExportacionService {
     private static final int LOTE = 500;
     private static final String[] COLUMNAS = {"CM", "N.º padrón", "Contribuyente", "Documento",
             "Origen", "PadTipo", "Tributo", "Segmento", "Días vencido", "Deuda", "Gestiones",
-            "Acción sugerida", "Convenio", "Contacto"};
+            "Acción sugerida", "Convenio", "Contacto", "Matrícula", "Facturas vencidas consideradas", "Facturas con importe positivo", "Año desde", "Año hasta", "Cantidad de años con deuda", "Años con deuda"};
 
     // Todas las páginas se consultan sobre la misma instantánea de la base local.
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
@@ -101,7 +101,7 @@ public class CarteraExportacionService {
                 d.segmentoMora() == null ? "Sin segmento" : d.segmentoMora().nombre(),
                 d.diasAtraso() == null ? 0L : d.diasAtraso(), d.importe(), d.cantidadGestiones(),
                 unir(d.accionesSugeridas(), a -> a.nombre()), d.convenio() ? "Sí" : "No",
-                d.conContacto() ? "Con datos" : "Sin datos");
+                d.conContacto() ? "Con datos" : "Sin datos", d.padron().matricula(),d.cantidadFacturasVencidas(),d.cantidadFacturasConDeuda(),d.anioDesde(),d.anioHasta(),d.cantidadAniosDeuda(),d.aniosDeuda());
         fila.getCell(9).setCellStyle(dinero);
     }
 

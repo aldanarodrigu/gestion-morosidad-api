@@ -12,15 +12,20 @@ public record PadronResponse(
         String block,
         String unidad,
         ContribuyenteResponse contribuyente,
-        OrigenDatos origen
+        OrigenDatos origen,
+        String matricula
 ) {
     public PadronResponse(String cm, String numeroPadron, String tipoPadron, String localidad,
                           String block, String unidad, ContribuyenteResponse contribuyente) {
-        this(cm, numeroPadron, tipoPadron, localidad, block, unidad, contribuyente, OrigenDatos.INTENDENCIA);
+        this(cm, numeroPadron, tipoPadron, localidad, block, unidad, contribuyente, OrigenDatos.INTENDENCIA, null);
+    }
+    public PadronResponse(String cm, String numeroPadron, String tipoPadron, String localidad,
+                          String block, String unidad, ContribuyenteResponse contribuyente, OrigenDatos origen) {
+        this(cm, numeroPadron, tipoPadron, localidad, block, unidad, contribuyente, origen, null);
     }
     public static PadronResponse de(Padron padron) {
         return new PadronResponse(padron.getCm(), padron.getNumeroPadron(),
                 padron.getTipoPadron(), padron.getLocalidad(), padron.getBlock(), padron.getUnidad(),
-                ContribuyenteResponse.de(padron), padron.getOrigen());
+                ContribuyenteResponse.de(padron), padron.getOrigen(), padron.getMatricula());
     }
 }

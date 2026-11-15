@@ -31,7 +31,8 @@ public record GeoPatContribuyenteDto(
         String telefonoPersonas,
 
         @JsonProperty("EMAIL_PERSONAS")
-        String emailPersonas
+        String emailPersonas,
+        @JsonProperty("MATRICULA") String matricula
 
 ) {
 }

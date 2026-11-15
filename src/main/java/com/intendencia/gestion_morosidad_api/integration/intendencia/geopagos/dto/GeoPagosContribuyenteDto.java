@@ -45,5 +45,10 @@ public record GeoPagosContribuyenteDto(
         @JsonProperty("FECHA_ULTIMO_GEOPAGO")
         String fechaUltimoGeoPago
 
-) {
+,
+        @JsonProperty("MATRICULA") String matricula) {
+    public GeoPagosContribuyenteDto(Object cm, Object numeroPadron, String tipoPadron, String localidad, Object block, Object unidad, String nombrePersonas, String telefonoPersonas, String emailPersonas, String nombreGeoPagos, String telefonoGeoPagos, String emailGeoPagos, String fechaUltimoGeoPago) {
+        this(cm, numeroPadron, tipoPadron, localidad, block, unidad, nombrePersonas, telefonoPersonas, emailPersonas, nombreGeoPagos, telefonoGeoPagos, emailGeoPagos, fechaUltimoGeoPago, null);
+    }
+
 }

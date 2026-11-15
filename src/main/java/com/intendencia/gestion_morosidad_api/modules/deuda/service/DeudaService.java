@@ -62,7 +62,7 @@ public class DeudaService {
                 .filter(java.util.Objects::nonNull).map(s -> s.getId()).distinct().toList();
         var acciones = obtenerAccionesPorSegmento(segmentoIds);
         var gestiones = contarGestiones(deudas.stream().map(Deuda::getId).toList());
-        return deudas.stream().map(deuda -> DeudaMapper.toResponse(deuda, hoy,
+        return deudas.stream().filter(Deuda::isEnPeriodoGestion).map(deuda -> DeudaMapper.toResponse(deuda, hoy,
                         deuda.getSegmentoMora() == null ? List.of()
                                 : acciones.getOrDefault(deuda.getSegmentoMora().getId(), List.of()))
                 .toBuilder().cantidadGestiones(gestiones.getOrDefault(deuda.getId(), 0L)).build()).toList();
@@ -100,7 +100,7 @@ public class DeudaService {
         Map<Long, List<AccionResponse>> accionesPorSegmento =
                 obtenerAccionesPorSegmento(segmentoIds);
 
-        return deudas.stream()
+        return deudas.stream().filter(Deuda::isEnPeriodoGestion)
                 .map(deuda -> {
                     Long segmentoId = deuda.getSegmentoMora() == null
                             ? null
@@ -201,7 +201,7 @@ public class DeudaService {
                 deudas.stream().map(Deuda::getId).toList()
         );
 
-        return deudas.stream()
+        return deudas.stream().filter(Deuda::isEnPeriodoGestion)
                 .map(deuda -> {
                     Long segmentoId = deuda.getSegmentoMora() == null
                             ? null
@@ -248,7 +248,7 @@ public class DeudaService {
                 deudas.stream().map(Deuda::getId).toList()
         );
 
-        return deudas.stream()
+        return deudas.stream().filter(Deuda::isEnPeriodoGestion)
                 .map(deuda -> {
                     Long segmentoId = deuda.getSegmentoMora() == null
                             ? null

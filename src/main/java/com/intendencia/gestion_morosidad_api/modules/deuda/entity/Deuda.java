@@ -30,8 +30,8 @@ import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
 /**
- * Deuda vencida de un padrón, cargada desde GeoPagos (/facturas/pendientes).
- * Los datos del padrón (CM, número, localidad, tipo) y del contribuyente se obtienen a través de {@link #padron}.
+ * Deuda vencida de un padrÃ³n, cargada desde GeoPagos (/facturas/pendientes).
+ * Los datos del padrÃ³n (CM, nÃºmero, localidad, tipo) y del contribuyente se obtienen a travÃ©s de {@link #padron}.
  */
 @Entity
 @Table(name = "deuda")
@@ -53,7 +53,7 @@ public class Deuda {
     /**
      * Tributos que componen la deuda (TRIBUTOS_DEUDA de GeoPagos).
      * BatchSize: en los listados carga los tributos de varias deudas en una sola consulta (evita N+1
-     * sin hacer fetch de la colección, que rompería la paginación).
+     * sin hacer fetch de la colecciÃ³n, que romperÃ­a la paginaciÃ³n).
      */
     @ManyToMany
     @JoinTable(
@@ -66,7 +66,39 @@ public class Deuda {
     @Column(precision = 15, scale = 2)
     private BigDecimal importe;
 
-    /** Vencimiento más antiguo impago: base para calcular días de atraso y segmento de mora. */
+    @Column(name = "en_periodo_gestion", nullable = false)
+    private boolean enPeriodoGestion = true;
+
+    @Column(name = "anio_periodo")
+    private Integer anioPeriodo;
+
+    @Column(name = "deuda_facturas", precision = 19, scale = 2)
+    private BigDecimal deudaFacturas;
+
+    @Column(name = "saldo_a_favor", precision = 19, scale = 2)
+    private BigDecimal saldoAFavor;
+
+    @Column(name = "credito_descontado", precision = 19, scale = 2)
+    private BigDecimal creditoDescontado;
+
+    @Column(name = "cantidad_facturas_vencidas")
+    private Integer cantidadFacturasVencidas;
+
+    @Column(name = "cantidad_facturas_con_deuda")
+    private Integer cantidadFacturasConDeuda;
+
+    @Column(name = "anio_desde")
+    private Integer anioDesde;
+
+    @Column(name = "anio_hasta")
+    private Integer anioHasta;
+
+    @Column(name = "cantidad_anios_deuda")
+    private Integer cantidadAniosDeuda;
+
+
+
+    /** Vencimiento mÃ¡s antiguo impago: base para calcular dÃ­as de atraso y segmento de mora. */
     @Column(name = "deuda_desde")
     private LocalDate deudaDesde;
 
@@ -79,17 +111,21 @@ public class Deuda {
     @Column(nullable = false)
     private boolean convenio;
 
-    /** Asignado automáticamente según los días de atraso y los rangos configurados (null si ninguno aplica). */
+    /** Asignado automÃ¡ticamente segÃºn los dÃ­as de atraso y los rangos configurados (null si ninguno aplica). */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "segmento_mora_id")
     private SegmentoMora segmentoMora;
 
-    /** Último cobro registrado en GeoPagos para el padrón (/facturas/canceladas). */
+    /** Ãšltimo cobro registrado en GeoPagos para el padrÃ³n (/facturas/canceladas). */
     @Column(name = "fecha_ultimo_cobro")
     private LocalDate fechaUltimoCobro;
 
     @Column(name = "importe_ultimo_cobro", precision = 15, scale = 2)
     private BigDecimal importeUltimoCobro;
+
+    /** Motivo informado por la fuente; solo PAGO identifica un pago. */
+    @Column(name = "motivo_ultimo_cobro", length = 60)
+    private String motivoUltimoCobro;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)

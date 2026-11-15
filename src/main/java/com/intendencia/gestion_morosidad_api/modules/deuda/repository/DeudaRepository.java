@@ -22,7 +22,7 @@ public interface DeudaRepository extends JpaRepository<Deuda, Long>, JpaSpecific
 
     @Query("""
             select distinct trim(d.padron.tipoPadron) from Deuda d
-            where d.estado <> :excluido and d.importe > 0
+            where d.enPeriodoGestion = true and d.estado <> :excluido and d.importe > 0
               and d.padron.tipoPadron is not null and trim(d.padron.tipoPadron) <> ''
             order by trim(d.padron.tipoPadron)
             """)
@@ -48,7 +48,7 @@ public interface DeudaRepository extends JpaRepository<Deuda, Long>, JpaSpecific
     List<Deuda> findByEstadoNot(EstadoDeuda estado);
 
     @EntityGraph(attributePaths = "padron")
-    @Query("select d from Deuda d where d.estado <> :excluido and (:tipoPadron is null or trim(d.padron.tipoPadron) = :tipoPadron)")
+    @Query("select d from Deuda d where d.enPeriodoGestion = true and d.estado <> :excluido and (:tipoPadron is null or trim(d.padron.tipoPadron) = :tipoPadron)")
     List<Deuda> findParaRecalcularSegmentos(EstadoDeuda excluido, String tipoPadron);
 
     long countByEstadoNot(EstadoDeuda estado);

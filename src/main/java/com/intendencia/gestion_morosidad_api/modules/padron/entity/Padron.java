@@ -34,6 +34,9 @@ public class Padron {
     @Column(name = "tipo_padron")
     private String tipoPadron;
 
+    @Column(length = 150)
+    private String matricula;
+
     private String localidad;
 
     private String block;

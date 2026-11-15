@@ -39,8 +39,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Aplica en una transacción los datos de un proveedor, sin conciliar padrones del otro origen.
- * Todo o nada: si algo falla no queda una sincronización a medias.
+ * Aplica en una transacciÃ³n los datos de un proveedor, sin conciliar padrones del otro origen.
+ * Todo o nada: si algo falla no queda una sincronizaciÃ³n a medias.
  * Carga las tablas en memoria una vez para no hacer consultas por cada fila.
  */
 @Component
@@ -75,23 +75,50 @@ class SincronizacionDeudasProcessor {
             List<GeoPagosFacturaCanceladaDto> canceladas,
             List<GeoPagosContribuyenteDto> contribuyentes,
             LocalDate hoy, LocalDateTime inicio, OrigenDatos origen) {
+        return procesar(pendientes,canceladas,contribuyentes,hoy,inicio,origen,null);
+    }
+
+    @Transactional
+    public ResultadoSincronizacion procesar(List<GeoPagosFacturaPendienteDto> pendientes,
+            List<GeoPagosFacturaCanceladaDto> canceladas, List<GeoPagosContribuyenteDto> contribuyentes,
+            LocalDate hoy, LocalDateTime inicio, OrigenDatos origen, Integer anioMinimo) {
 
         Contexto ctx = new Contexto(hoy, LocalDateTime.now(clock), origen);
 
-        if (pendientes.isEmpty() && deudaRepository.countByPadronOrigenAndEstadoNot(origen, EstadoDeuda.CANCELADA) > 0) {
-            // Protección: una respuesta vacía por error del origen cancelaría todas las deudas
+        if (anioMinimo == null && pendientes.isEmpty() && deudaRepository.countByPadronOrigenAndEstadoNot(origen, EstadoDeuda.CANCELADA) > 0) {
+            // ProtecciÃ³n: una respuesta vacÃ­a por error del origen cancelarÃ­a todas las deudas
             throw new IntegracionExternaException(
-                    origen.proveedor() + " no devolvió deudas pendientes; no se aplicaron cambios. Verificar el servicio.");
+                    origen.proveedor() + " no devolviÃ³ deudas pendientes; no se aplicaron cambios. Verificar el servicio.");
         }
 
+        if (anioMinimo != null) {
+            LocalDate desdePeriodo = LocalDate.of(anioMinimo, 1, 1);
+            if (pendientes.stream().anyMatch(f -> f == null || f.deudaDesde() == null || f.deudaDesde().isBefore(desdePeriodo) || !f.deudaDesde().isBefore(hoy)))
+                throw new IntegracionExternaException("La API devolvió vencimientos fuera del período solicitado; no se aplicaron cambios.");
+        }
         for (GeoPagosFacturaPendienteDto fila : pendientes) {
             procesarPendiente(fila, ctx);
         }
-        cancelarDeudasQueYaNoEstanPendientes(ctx);
+        if (anioMinimo == null) cancelarDeudasQueYaNoEstanPendientes(ctx);
+        else {
+            if (ctx.cmsImportados.size() != pendientes.size())
+                throw new IntegracionExternaException("La respuesta del período contiene registros incompletos; no se aplicaron cambios.");
+            for (var entry : ctx.deudasPorCm.entrySet()) {
+                var deuda = entry.getValue();
+                deuda.setAnioPeriodo(anioMinimo);
+                boolean incluida = ctx.cmsImportados.contains(entry.getKey());
+                deuda.setEnPeriodoGestion(incluida);
+                if (!incluida) {
+                    // La ausencia en una consulta filtrada no demuestra pago/cancelación.
+                    deuda.setFechaSincronizacion(ctx.ahora);
+                    deuda.setSegmentoMora(null);
+                }
+            }
+        }
         registrarCobros(canceladas, ctx);
         aplicarContactosDeContribuyentes(contribuyentes, ctx);
 
-        // Guardar lo nuevo respetando las dependencias (lo existente se actualiza solo al terminar la transacción)
+        // Guardar lo nuevo respetando las dependencias (lo existente se actualiza solo al terminar la transacciÃ³n)
         tributoRepository.saveAll(ctx.tributosNuevos);
         contribuyenteRepository.saveAll(ctx.contribuyentesNuevos);
         padronRepository.saveAll(ctx.padronesNuevos);
@@ -102,7 +129,7 @@ class SincronizacionDeudasProcessor {
                 inicio, LocalDateTime.now(clock), pendientes.size(), canceladas.size(),
                 ctx.deudasNuevas.size(), ctx.actualizadas, ctx.canceladas, ctx.omitidos,
                 List.copyOf(ctx.advertencias));
-        log.info("Sincronización {}: {} pendientes, {} creadas, {} actualizadas, {} canceladas, {} omitidas",
+        log.info("SincronizaciÃ³n {}: {} pendientes, {} creadas, {} actualizadas, {} canceladas, {} omitidas",
                 origen.proveedor(), resultado.pendientesRecibidas(), resultado.deudasCreadas(), resultado.deudasActualizadas(),
                 resultado.deudasCanceladas(), resultado.registrosOmitidos());
         return resultado;
@@ -119,9 +146,9 @@ class SincronizacionDeudasProcessor {
             ctx.omitir("CM " + cm + " repetido en la respuesta de " + ctx.origen.proveedor());
             return;
         }
-        // El CM figura en la foto: un dato incompleto no demuestra que su deuda se saldó.
+        // El CM figura en la foto: un dato incompleto no demuestra que su deuda se saldÃ³.
         if (numeroPadron == null) {
-            ctx.omitir("CM " + cm + ": sin número de padrón");
+            ctx.omitir("CM " + cm + ": sin nÃºmero de padrÃ³n");
             return;
         }
         if (fila.importeDeuda() == null) {
@@ -131,10 +158,19 @@ class SincronizacionDeudasProcessor {
         }
         if (fila.importeDeuda().signum() <= 0) {
             // No crear contribuyentes ni padrones sin saldo vencido positivo.
-            // Si existía una deuda, conservarla cancelada junto con sus gestiones.
+            // Si existÃ­a una deuda, conservarla cancelada junto con sus gestiones.
             Deuda existente = ctx.deudasPorCm.get(cm);
             if (existente != null) {
                 existente.setImporte(fila.importeDeuda());
+                existente.setDeudaFacturas(fila.deudaFacturas());
+                existente.setSaldoAFavor(fila.saldoAFavor());
+                existente.setCreditoDescontado(fila.creditoDescontado());
+                existente.setCantidadFacturasVencidas(fila.cantidadFacturasVencidas());
+                existente.setCantidadFacturasConDeuda(fila.cantidadFacturasConDeuda());
+                existente.setAnioDesde(fila.anioDesde());
+                existente.setAnioHasta(fila.anioHasta());
+                existente.setCantidadAniosDeuda(fila.cantidadAniosDeuda());
+
                 cancelarDeuda(existente, ctx);
             }
             ctx.omitir("CM " + cm + ": sin deuda vencida positiva");
@@ -197,6 +233,8 @@ class SincronizacionDeudasProcessor {
                 ctx.fuentePendientes(), domicilio, true));
 
         padron.setNumeroPadron(limitar(numeroPadron, 100));
+        if (ctx.origen == OrigenDatos.SUCIVE && texto(fila.matricula()) != null)
+            padron.setMatricula(limitar(texto(fila.matricula()), 150));
         padron.setTipoPadron(limitar(texto(fila.padtipo()), 100));
         padron.setLocalidad(limitar(texto(fila.localidad()), 255));
         padron.setBlock(limitar(texto(fila.block()), 100));
@@ -216,6 +254,16 @@ class SincronizacionDeudasProcessor {
 
         boolean convenio = "SI".equalsIgnoreCase(texto(fila.convenio()));
         deuda.setImporte(fila.importeDeuda());
+        deuda.setDeudaFacturas(fila.deudaFacturas());
+        deuda.setSaldoAFavor(fila.saldoAFavor());
+        deuda.setCreditoDescontado(fila.creditoDescontado());
+        deuda.setCantidadFacturasVencidas(fila.cantidadFacturasVencidas());
+        deuda.setCantidadFacturasConDeuda(fila.cantidadFacturasConDeuda());
+        deuda.setAnioDesde(fila.anioDesde());
+        deuda.setAnioHasta(fila.anioHasta());
+        deuda.setCantidadAniosDeuda(fila.cantidadAniosDeuda());
+
+
         deuda.setDeudaDesde(fila.deudaDesde());
         deuda.setUltimoVencimiento(fila.ultimoVencimiento());
         deuda.setAniosDeuda(limitar(texto(fila.aniosDeuda()), 200));
@@ -226,7 +274,7 @@ class SincronizacionDeudasProcessor {
         deuda.setFechaSincronizacion(ctx.ahora);
     }
 
-    /** Solo modifica la colección si cambió: evita reescribir deuda_tributo en cada sincronización. */
+    /** Solo modifica la colecciÃ³n si cambiÃ³: evita reescribir deuda_tributo en cada sincronizaciÃ³n. */
     private void actualizarTributos(Deuda deuda, Set<String> codigos, Contexto ctx) {
         Set<String> actuales = deuda.getTributos().stream().map(Tributo::getCodigo).collect(Collectors.toSet());
         if (actuales.equals(codigos)) {
@@ -245,15 +293,15 @@ class SincronizacionDeudasProcessor {
     }
 
     /**
-     * Contactos de contribuyentes-geopagos: teléfono y correo de Personas (del contribuyente) y de la
-     * última transacción GeoPagos (puede ser de quien pagó, no del titular). Solo para los padrones
+     * Contactos de contribuyentes-geopagos: telÃ©fono y correo de Personas (del contribuyente) y de la
+     * Ãºltima transacciÃ³n GeoPagos (puede ser de quien pagÃ³, no del titular). Solo para los padrones
      * con deuda importados en esta corrida; el nombre y el documento vienen de facturas/pendientes,
-     * que los trae juntos, y de acá solo se toma el nombre si faltaba.
+     * que los trae juntos, y de acÃ¡ solo se toma el nombre si faltaba.
      */
     private void aplicarContactosDeContribuyentes(List<GeoPagosContribuyenteDto> contribuyentes, Contexto ctx) {
         if (contribuyentes == null) {
             ctx.advertir("No se pudo consultar contribuyentes de " + ctx.origen.proveedor() + ": los contactos "
-                    + "se actualizarán en la próxima sincronización");
+                    + "se actualizarÃ¡n en la prÃ³xima sincronizaciÃ³n");
             return;
         }
         Map<String, GeoPagosContribuyenteDto> porCm = new HashMap<>();
@@ -268,7 +316,11 @@ class SincronizacionDeudasProcessor {
             if (dto == null) {
                 continue;
             }
-            Contribuyente contribuyente = ctx.padronesPorCm.get(cm).getContribuyente();
+            Padron padron = ctx.padronesPorCm.get(cm);
+            // Pendientes es la fuente principal; contribuyentes completa datos faltantes.
+            if (ctx.origen == OrigenDatos.SUCIVE && texto(padron.getMatricula()) == null && texto(dto.matricula()) != null)
+                padron.setMatricula(limitar(texto(dto.matricula()), 150));
+            Contribuyente contribuyente = padron.getContribuyente();
             String nombrePersonas = limitar(texto(dto.nombrePersonas()), 255);
             if (SIN_NOMBRE.equals(contribuyente.getNombre()) && nombrePersonas != null) {
                 contribuyente.setNombre(nombrePersonas);
@@ -285,7 +337,7 @@ class SincronizacionDeudasProcessor {
         }
     }
 
-    /** Una deuda que ya no aparece en pendientes dejó de estar vencida e impaga. */
+    /** Una deuda que ya no aparece en pendientes dejÃ³ de estar vencida e impaga. */
     private void cancelarDeudasQueYaNoEstanPendientes(Contexto ctx) {
         ctx.deudasPorCm.forEach((cm, deuda) -> {
             if (!ctx.cmsProcesados.contains(cm) && deuda.getEstado() != EstadoDeuda.CANCELADA) {
@@ -307,14 +359,14 @@ class SincronizacionDeudasProcessor {
         for (GeoPagosFacturaCanceladaDto cobro : canceladas) {
             String cm = texto(cobro.cm());
             // La consulta de contribuyentes no incluye DOCUMENTO. Un cobro reciente puede
-            // completarlo para un padrón que ya no tiene facturas pendientes.
+            // completarlo para un padrÃ³n que ya no tiene facturas pendientes.
             if (!ctx.cmsProcesados.contains(cm)) {
                 Padron padron = ctx.padronesPorCm.get(cm);
                 if (padron != null && padron.getContribuyente() != null) {
                     Contribuyente contribuyente = padron.getContribuyente();
                     String documento = limitar(texto(cobro.documento()), 50);
                     String documentoActual = texto(contribuyente.getDocumento());
-                    // Un cobro histórico puede corresponder a otra persona: no cambia la identidad
+                    // Un cobro histÃ³rico puede corresponder a otra persona: no cambia la identidad
                     // del titular actual. Un nombre distinto tampoco basta para borrar su documento.
                     if (documentoActual == null || documento == null || documentoActual.equals(documento)) {
                         String nombre = texto(cobro.persona());
@@ -334,11 +386,12 @@ class SincronizacionDeudasProcessor {
             if (deuda.getFechaUltimoCobro() == null || !cobro.fechaCobro().isBefore(deuda.getFechaUltimoCobro())) {
                 deuda.setFechaUltimoCobro(cobro.fechaCobro());
                 deuda.setImporteUltimoCobro(cobro.importeTotal());
+                deuda.setMotivoUltimoCobro(limitar(texto(cobro.motivoAnulacion()), 60));
             }
         }
     }
 
-    /** CM, padrón, documento, etc. pueden llegar como número o texto: siempre se guardan como texto. */
+    /** CM, padrÃ³n, documento, etc. pueden llegar como nÃºmero o texto: siempre se guardan como texto. */
     static String texto(Object valor) {
         if (valor == null) {
             return null;
@@ -353,7 +406,7 @@ class SincronizacionDeudasProcessor {
         return valor == null || valor.length() <= largo ? valor : valor.substring(0, largo);
     }
 
-    /** Estado de una ejecución: índices en memoria, entidades nuevas y contadores. */
+    /** Estado de una ejecuciÃ³n: Ã­ndices en memoria, entidades nuevas y contadores. */
     private final class Contexto {
         final LocalDate hoy;
         final LocalDateTime ahora;

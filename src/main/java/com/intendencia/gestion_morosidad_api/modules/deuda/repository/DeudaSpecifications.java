@@ -27,6 +27,7 @@ public final class DeudaSpecifications {
     public static Specification<Deuda> conFiltro(DeudaFiltro filtro) {
         return (root, query, cb) -> {
             List<Predicate> predicados = new ArrayList<>();
+            predicados.add(cb.isTrue(root.get("enPeriodoGestion")));
 
             if (filtro.estado() != null) {
                 predicados.add(cb.equal(root.get("estado"), filtro.estado()));
@@ -60,6 +61,11 @@ public final class DeudaSpecifications {
                         ),
                         cb.like(
                                 contribuyente.get("documento"),
+                                contiene(texto),
+                                ESCAPE
+                        ),
+                        cb.like(
+                                cb.lower(padron.get("matricula")),
                                 contiene(texto),
                                 ESCAPE
                         ),

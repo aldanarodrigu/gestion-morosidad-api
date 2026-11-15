@@ -29,12 +29,14 @@ public class CapturaService {
             if (!claves.add(cuenta.origen() + ":" + cm)) throw new ReglaNegocioException("Hay CM repetidos para el mismo origen.");
             var p = padrones.findByCmAndOrigen(cm,cuenta.origen()).orElseThrow(() -> new RecursoNoEncontradoException("No existe el CM " + cm + " en " + cuenta.origen()));
             var d = deudas.findByPadronCmAndPadronOrigen(cm,cuenta.origen()).orElse(null);
-            boolean pendiente = d != null && d.getEstado() != EstadoDeuda.CANCELADA && d.getImporte() != null && d.getImporte().signum() > 0;
+            boolean pendiente = d != null && d.isEnPeriodoGestion() && d.getEstado() != EstadoDeuda.CANCELADA && d.getImporte() != null && d.getImporte().signum() > 0;
             var persona = p.getContribuyente();
             filas.add(new EstadoCuenta(cm,cuenta.origen(),p.getNumeroPadron(),p.getTipoPadron(),persona == null ? null : persona.getNombre(),persona == null ? null : persona.getDocumento(),
-                pendiente ? d.getImporte() : BigDecimal.ZERO,pendiente ? d.getEstado().name() : "SIN_DEUDA_PENDIENTE",
+                pendiente ? d.getImporte() : BigDecimal.ZERO,pendiente ? d.getEstado().name() : d != null && !d.isEnPeriodoGestion() ? "FUERA_PERIODO" : "SIN_DEUDA_PENDIENTE",
                 pendiente && d.getSegmentoMora() != null ? d.getSegmentoMora().getNombre() : null,
-                d == null ? null : d.getFechaSincronizacion(),d == null ? null : d.getFechaUltimoCobro(),d == null ? null : d.getImporteUltimoCobro()));
+                d == null ? null : d.getFechaSincronizacion(),d == null ? null : d.getFechaUltimoCobro(),d == null ? null : d.getImporteUltimoCobro(),d == null ? null : d.getMotivoUltimoCobro(),
+                pendiente ? d.getDeudaFacturas() : null, pendiente ? d.getSaldoAFavor() : null, pendiente ? d.getCreditoDescontado() : null, pendiente ? d.getAniosDeuda() : null,
+                pendiente ? d.getCantidadFacturasVencidas() : null, pendiente ? d.getCantidadFacturasConDeuda() : null, pendiente ? d.getAnioDesde() : null, pendiente ? d.getAnioHasta() : null, pendiente ? d.getCantidadAniosDeuda() : null));
         }
         LocalDateTime fecha = LocalDateTime.now(clock);
         Long id = capturas.crear(peticion.nombre().trim(),fecha,usuario);

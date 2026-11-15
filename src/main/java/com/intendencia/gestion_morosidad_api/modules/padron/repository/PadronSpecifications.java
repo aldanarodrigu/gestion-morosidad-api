@@ -35,6 +35,7 @@ public final class PadronSpecifications {
             Root<Deuda> deuda = deudaVigente.from(Deuda.class);
             deudaVigente.select(cb.literal(1L)).where(
                     cb.equal(deuda.get("padron"), root),
+                    cb.isTrue(deuda.get("enPeriodoGestion")),
                     cb.notEqual(deuda.get("estado"), EstadoDeuda.CANCELADA));
             predicados.add(cb.exists(deudaVigente));
 

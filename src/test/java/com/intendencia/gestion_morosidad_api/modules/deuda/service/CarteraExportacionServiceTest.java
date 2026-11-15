@@ -29,8 +29,9 @@ class CarteraExportacionServiceTest {
     private DeudaResponse deuda(long id) {
         var persona = new ContribuyenteResponse("00042", "=Nombre de prueba", "00123456");
         return DeudaResponse.builder().id(id).contribuyenteId(7L).contribuyente(persona)
-                .padron(new PadronResponse("00042", "00078", "CIU", null, null, null, persona, OrigenDatos.SUCIVE))
+                .padron(new PadronResponse("00042", "00078", "CIU", null, null, null, persona, OrigenDatos.SUCIVE, "SAA0123"))
                 .tributos(List.of(new TributoResponse(1L, "2800", null), new TributoResponse(2L, "2801", "Tasa")))
+                .cantidadFacturasVencidas(5).cantidadFacturasConDeuda(3).anioDesde(2021).anioHasta(2026).cantidadAniosDeuda(2).aniosDeuda("2021, 2026")
                 .importe(new BigDecimal("1234.56")).diasAtraso(400L).segmentoMora(tardia)
                 .cantidadGestiones(2L).accionesSugeridas(List.of(new AccionResponse(1L, "Llamada", true),
                         new AccionResponse(2L, "Email", true))).conContacto(true).convenio(true).build();
@@ -45,7 +46,7 @@ class CarteraExportacionServiceTest {
         try (var libro = WorkbookFactory.create(new ByteArrayInputStream(servicio.exportar(filtro, orden, false)))) {
             var hoja = libro.getSheet("Cartera");
             assertEquals(501, hoja.getLastRowNum());
-            assertEquals(14, hoja.getRow(0).getLastCellNum());
+            assertEquals(21, hoja.getRow(0).getLastCellNum());
             assertEquals("PadTipo", hoja.getRow(0).getCell(5).getStringCellValue());
             assertEquals("Gestiones", hoja.getRow(0).getCell(10).getStringCellValue());
             var r = hoja.getRow(501);
@@ -61,6 +62,14 @@ class CarteraExportacionServiceTest {
             assertEquals("Llamada, Email", r.getCell(11).getStringCellValue());
             assertEquals("Sí", r.getCell(12).getStringCellValue());
             assertEquals("Con datos", r.getCell(13).getStringCellValue());
+            assertEquals("Matrícula", hoja.getRow(0).getCell(14).getStringCellValue());
+            assertEquals("SAA0123", r.getCell(14).getStringCellValue());
+            assertEquals(5, r.getCell(15).getNumericCellValue());
+            assertEquals(3, r.getCell(16).getNumericCellValue());
+            assertEquals(2021, r.getCell(17).getNumericCellValue());
+            assertEquals(2026, r.getCell(18).getNumericCellValue());
+            assertEquals(2, r.getCell(19).getNumericCellValue());
+            assertEquals("2021, 2026", r.getCell(20).getStringCellValue());
             assertNotNull(hoja.getPaneInformation());
         }
         verifyNoInteractions(grupos);

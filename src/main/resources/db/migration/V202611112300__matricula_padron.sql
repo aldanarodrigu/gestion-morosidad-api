@@ -1,0 +1,1 @@
+ALTER TABLE padrones ADD COLUMN matricula VARCHAR(150);

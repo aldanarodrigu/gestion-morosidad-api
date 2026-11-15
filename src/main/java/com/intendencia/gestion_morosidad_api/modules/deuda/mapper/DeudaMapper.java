@@ -16,24 +16,36 @@ public final class DeudaMapper {
     private DeudaMapper() {
     }
 
-    /** @param hoy fecha de referencia para calcular los días de atraso */
+    /** @param hoy fecha de referencia para calcular los dÃ­as de atraso */
     public static DeudaResponse toResponse(Deuda deuda, LocalDate hoy, List<AccionResponse> accionesSugeridas) {
         Padron padron = deuda.getPadron();
         PadronResponse padronResponse = PadronResponse.de(padron);
         return DeudaResponse.builder()
                 .id(deuda.getId())
+                .enPeriodoGestion(deuda.isEnPeriodoGestion()).anioPeriodo(deuda.getAnioPeriodo())
                 .padron(padronResponse)
                 .contribuyente(padronResponse.contribuyente())
                 .tributos(toTributosResponse(deuda))
                 .importe(deuda.getImporte())
+                .deudaFacturas(deuda.getDeudaFacturas())
+                .saldoAFavor(deuda.getSaldoAFavor())
+                .creditoDescontado(deuda.getCreditoDescontado())
+
                 .deudaDesde(deuda.getDeudaDesde())
                 .ultimoVencimiento(deuda.getUltimoVencimiento())
                 .diasAtraso(diasAtraso(deuda.getDeudaDesde(), hoy))
                 .aniosDeuda(deuda.getAniosDeuda())
+                .cantidadFacturasVencidas(deuda.getCantidadFacturasVencidas())
+                .cantidadFacturasConDeuda(deuda.getCantidadFacturasConDeuda())
+                .anioDesde(deuda.getAnioDesde())
+                .anioHasta(deuda.getAnioHasta())
+                .cantidadAniosDeuda(deuda.getCantidadAniosDeuda())
+
                 .convenio(deuda.isConvenio())
                 .segmentoMora(deuda.getSegmentoMora() == null ? null : SegmentoMoraResponse.de(deuda.getSegmentoMora()))
                 .fechaUltimoCobro(deuda.getFechaUltimoCobro())
                 .importeUltimoCobro(deuda.getImporteUltimoCobro())
+                .motivoUltimoCobro(deuda.getMotivoUltimoCobro())
                 .estado(deuda.getEstado())
                 .fechaSincronizacion(deuda.getFechaSincronizacion())
                 .accionesSugeridas(accionesSugeridas)
@@ -43,7 +55,7 @@ public final class DeudaMapper {
                 .build();
     }
 
-    /** Tributos de la deuda ordenados por código. */
+    /** Tributos de la deuda ordenados por cÃ³digo. */
     public static List<TributoResponse> toTributosResponse(Deuda deuda) {
         return deuda.getTributos().stream()
                 .sorted(TributoResponse.POR_CODIGO)

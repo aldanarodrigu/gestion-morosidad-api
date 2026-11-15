@@ -14,7 +14,7 @@ public class ReporteRepository {
     private static final String PERSONA = "CASE WHEN nullif(trim(c.documento),'') IS NOT NULL THEN 'DOC:' || trim(c.documento) ELSE 'ID:' || c.id::text END";
     private static final String TIPO = "nullif(trim(p.tipo_padron),'')";
     public ReporteCartera consultar(OrigenDatos origen, String tipoPadron, Long segmento, LocalDateTime generado) {
-        String from = " FROM deuda d JOIN padrones p ON p.id=d.padron_id JOIN contribuyentes c ON c.id=p.contribuyente_id LEFT JOIN segmentos_mora s ON s.id=d.segmento_mora_id WHERE d.estado <> 'CANCELADA' AND d.importe > 0";
+        String from = " FROM deuda d JOIN padrones p ON p.id=d.padron_id JOIN contribuyentes c ON c.id=p.contribuyente_id LEFT JOIN segmentos_mora s ON s.id=d.segmento_mora_id WHERE d.en_periodo_gestion = true AND d.estado <> 'CANCELADA' AND d.importe > 0";
         var args = new ArrayList<Object>();
         if (origen != null) { from += " AND p.origen=?"; args.add(origen.name()); }
         if (tipoPadron != null && !tipoPadron.isBlank()) { from += " AND trim(p.tipo_padron)=?"; args.add(tipoPadron.trim()); }

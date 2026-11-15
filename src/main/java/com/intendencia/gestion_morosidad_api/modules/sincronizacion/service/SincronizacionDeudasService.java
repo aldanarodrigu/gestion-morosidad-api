@@ -10,6 +10,7 @@ import com.intendencia.gestion_morosidad_api.modules.sincronizacion.dto.Resultad
 import com.intendencia.gestion_morosidad_api.shared.exception.IntegracionExternaException;
 import com.intendencia.gestion_morosidad_api.shared.exception.OperacionEnCursoException;
 import java.time.Clock;
+import com.intendencia.gestion_morosidad_api.integration.intendencia.common.SeguimientoSincronizacion;
 import com.intendencia.gestion_morosidad_api.integration.intendencia.geopat.client.GeoPatClient;
 import com.intendencia.gestion_morosidad_api.integration.intendencia.common.IntendenciaClient;
 import com.intendencia.gestion_morosidad_api.shared.enums.OrigenDatos;
@@ -41,6 +42,7 @@ public class SincronizacionDeudasService {
     private final SincronizacionDeudasProcessor processor;
     private final DeudaRepository deudaRepository;
     private final Clock clock;
+    private final PeriodoSincronizacionService periodo;
 
     @Value("${geopagos.username:}")
     private String usuarioApi;
@@ -55,7 +57,16 @@ public class SincronizacionDeudasService {
         return sincronizar(OrigenDatos.INTENDENCIA);
     }
 
+    public synchronized void guardarAnio(int anio) {
+        if (enCurso.get()) throw new OperacionEnCursoException("No se puede cambiar el período durante una sincronización.");
+        periodo.guardar(anio);
+    }
+
     public ResultadoSincronizacion sincronizar(OrigenDatos origen) {
+        return sincronizar(origen, periodo.anioMinimo());
+    }
+
+    public ResultadoSincronizacion sincronizar(OrigenDatos origen, int anioMinimo) {
         java.util.Objects.requireNonNull(origen);
         IntendenciaClient client = origen == OrigenDatos.SUCIVE ? geoPatClient : geoPagosClient;
         if (usuarioApi == null || usuarioApi.isBlank()) {
@@ -69,26 +80,34 @@ public class SincronizacionDeudasService {
             LocalDateTime inicio = LocalDateTime.now(clock);
             LocalDate hoy = inicio.toLocalDate();
 
+            LocalDate inicioPeriodo = LocalDate.of(anioMinimo, 1, 1);
+            SeguimientoSincronizacion.etapa("DEUDAS",0);
             List<GeoPagosFacturaPendienteDto> pendientes =
-                    consultar(origen, "facturas pendientes", client::obtenerFacturasPendientes);
+                    consultar(origen, "facturas pendientes", () -> client.obtenerFacturasPendientes(inicioPeriodo, hoy));
 
             // Cobros desde la sincronización anterior (con un día de margen); fecha_hasta no se incluye
             LocalDate desde = deudaRepository.ultimaSincronizacionPorOrigen(origen)
                     .map(fecha -> fecha.toLocalDate().minusDays(1))
                     .orElse(hoy.minusDays(diasCobrosIniciales));
+            SeguimientoSincronizacion.etapa("COBROS",0);
             List<GeoPagosFacturaCanceladaDto> canceladas = consultar(origen, "facturas canceladas",
                     () -> client.obtenerFacturasCanceladas(desde, hoy.plusDays(1)));
 
             // Contactos de Personas y del último GeoPago. Opcional: si falla se guardan las deudas
             // igual y los contactos se actualizan en la próxima sincronización (null = no disponible).
             List<GeoPagosContribuyenteDto> contribuyentes;
+            SeguimientoSincronizacion.etapa("CONTACTOS",0);
             try {
                 contribuyentes = consultar(origen, "contribuyentes", client::obtenerContribuyentes);
             } catch (IntegracionExternaException ex) {
                 contribuyentes = null;
             }
 
-            return processor.procesar(pendientes, canceladas, contribuyentes, hoy, inicio, origen);
+            SeguimientoSincronizacion.etapa("GUARDANDO",pendientes.size());
+            var resultado = processor.procesar(pendientes, canceladas, contribuyentes, hoy, inicio, origen, anioMinimo);
+            // El proxy del procesador ya confirmó la transacción antes de anunciar la finalización.
+            SeguimientoSincronizacion.etapa("FINALIZADA",pendientes.size());
+            return resultado;
         } finally {
             enCurso.set(false);
         }

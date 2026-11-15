@@ -18,9 +18,9 @@ public class CapturaRepository {
     }
     public void guardarCuenta(Long id, EstadoCuenta c) {
         jdbc.update("""
-            INSERT INTO captura_cuentas(captura_id,cm,origen,numero_padron,tipo_padron,nombre,documento,importe,estado,segmento,fecha_sincronizacion,fecha_ultimo_cobro,importe_ultimo_cobro)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
-            """,id,c.cm(),c.origen().name(),c.numeroPadron(),c.tipoPadron(),c.nombre(),c.documento(),c.importe(),c.estado(),c.segmento(),c.fechaSincronizacion(),c.fechaUltimoCobro(),c.importeUltimoCobro());
+            INSERT INTO captura_cuentas(captura_id,cm,origen,numero_padron,tipo_padron,nombre,documento,importe,estado,segmento,fecha_sincronizacion,fecha_ultimo_cobro,importe_ultimo_cobro,motivo_ultimo_cobro,deuda_facturas,saldo_a_favor,credito_descontado,anios_deuda,cantidad_facturas_vencidas,cantidad_facturas_con_deuda,anio_desde,anio_hasta,cantidad_anios_deuda)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            """,id,c.cm(),c.origen().name(),c.numeroPadron(),c.tipoPadron(),c.nombre(),c.documento(),c.importe(),c.estado(),c.segmento(),c.fechaSincronizacion(),c.fechaUltimoCobro(),c.importeUltimoCobro(),c.motivoUltimoCobro(),c.deudaFacturas(),c.saldoAFavor(),c.creditoDescontado(),c.aniosDeuda(),c.cantidadFacturasVencidas(),c.cantidadFacturasConDeuda(),c.anioDesde(),c.anioHasta(),c.cantidadAniosDeuda());
     }
     public List<Resumen> listar() {
         return jdbc.query("""
@@ -33,7 +33,7 @@ public class CapturaRepository {
         var cabecera = jdbc.query("SELECT * FROM capturas_cartera WHERE id=?", (r,n) -> new Detalle(r.getLong("id"),r.getString("nombre"),r.getObject("fecha",LocalDateTime.class),r.getString("usuario"),List.of()),id);
         if (cabecera.isEmpty()) return Optional.empty();
         var filas = jdbc.query("SELECT * FROM captura_cuentas WHERE captura_id=? ORDER BY origen,cm",(r,n) -> new EstadoCuenta(
-            r.getString("cm"),OrigenDatos.valueOf(r.getString("origen")),r.getString("numero_padron"),r.getString("tipo_padron"),r.getString("nombre"),r.getString("documento"),r.getBigDecimal("importe"),r.getString("estado"),r.getString("segmento"),r.getObject("fecha_sincronizacion",LocalDateTime.class),r.getObject("fecha_ultimo_cobro",java.time.LocalDate.class),r.getBigDecimal("importe_ultimo_cobro")),id);
+            r.getString("cm"),OrigenDatos.valueOf(r.getString("origen")),r.getString("numero_padron"),r.getString("tipo_padron"),r.getString("nombre"),r.getString("documento"),r.getBigDecimal("importe"),r.getString("estado"),r.getString("segmento"),r.getObject("fecha_sincronizacion",LocalDateTime.class),r.getObject("fecha_ultimo_cobro",java.time.LocalDate.class),r.getBigDecimal("importe_ultimo_cobro"),r.getString("motivo_ultimo_cobro"),r.getBigDecimal("deuda_facturas"),r.getBigDecimal("saldo_a_favor"),r.getBigDecimal("credito_descontado"),r.getString("anios_deuda"),r.getObject("cantidad_facturas_vencidas",Integer.class),r.getObject("cantidad_facturas_con_deuda",Integer.class),r.getObject("anio_desde",Integer.class),r.getObject("anio_hasta",Integer.class),r.getObject("cantidad_anios_deuda",Integer.class)),id);
         var c = cabecera.getFirst();
         return Optional.of(new Detalle(c.id(),c.nombre(),c.fecha(),c.usuario(),filas));
     }

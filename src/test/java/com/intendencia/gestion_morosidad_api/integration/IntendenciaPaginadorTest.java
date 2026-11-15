@@ -81,7 +81,8 @@ class IntendenciaPaginadorTest {
     }
     @Test void timeoutEnSegundaPaginaNoDevuelveResultadosParciales() {
         pagina(1, primera());
-        server.expect(queryParam("page", "2")).andRespond(withStatus(HttpStatus.GATEWAY_TIMEOUT));
+        for (int intento=0; intento<3; intento++)
+            server.expect(queryParam("page", "2")).andRespond(withStatus(HttpStatus.GATEWAY_TIMEOUT));
         assertThatThrownBy(this::descargar).isInstanceOf(RestClientResponseException.class);
         server.verify();
     }

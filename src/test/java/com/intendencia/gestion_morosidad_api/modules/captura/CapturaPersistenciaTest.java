@@ -38,18 +38,26 @@ class CapturaPersistenciaTest {
     }
     @Test void conservaCapturaTrasCambiarDatosActualesYDistingueProveedores() {
         var p = padron("10001",OrigenDatos.INTENDENCIA); padron("10001",OrigenDatos.SUCIVE);
-        var d = new Deuda(); d.setPadron(p); d.setImporte(new BigDecimal("123.45")); d.setFechaSincronizacion(LocalDateTime.of(2026,10,30,12,0)); d=deudas.save(d);
+        var d = new Deuda(); d.setPadron(p); d.setImporte(new BigDecimal("123.45")); d.setFechaSincronizacion(LocalDateTime.of(2026,10,30,12,0)); d.setCantidadFacturasVencidas(5); d.setCantidadFacturasConDeuda(3); d.setAnioDesde(2021); d.setAnioHasta(2026); d.setCantidadAniosDeuda(2); d.setAniosDeuda("2021, 2026"); d.setDeudaFacturas(new BigDecimal("150.00")); d.setSaldoAFavor(new BigDecimal("26.55")); d.setCreditoDescontado(new BigDecimal("26.55")); d.setMotivoUltimoCobro("ANULADO POR ERROR"); d=deudas.save(d);
         var c = service.crear(new Crear("  Primera  ",List.of(new Cuenta("10001",OrigenDatos.INTENDENCIA),new Cuenta("10001",OrigenDatos.SUCIVE))),"analista");
         assertEquals(2,c.cuentas().size()); assertEquals("Primera",c.nombre()); assertEquals("analista",c.usuario());
-        d.setImporte(new BigDecimal("999.99")); deudas.save(d);
+        d.setCantidadFacturasVencidas(9); d.setAniosDeuda("2026"); d.setDeudaFacturas(new BigDecimal("999.99")); d.setSaldoAFavor(BigDecimal.ZERO); d.setCreditoDescontado(BigDecimal.ZERO); d.setMotivoUltimoCobro("PAGO"); d.setImporte(new BigDecimal("999.99")); deudas.save(d);
         p.setNumeroPadron("CAMBIADO"); padrones.save(p);
         var leida = service.obtener(c.id());
         var anterior = leida.cuentas().stream().filter(x -> x.origen()==OrigenDatos.INTENDENCIA).findFirst().orElseThrow();
+        assertEquals("ANULADO POR ERROR",anterior.motivoUltimoCobro());
+        assertEquals(5,anterior.cantidadFacturasVencidas()); assertEquals(3,anterior.cantidadFacturasConDeuda());
+        assertEquals(2021,anterior.anioDesde()); assertEquals(2026,anterior.anioHasta());
+        assertEquals(2,anterior.cantidadAniosDeuda()); assertEquals("2021, 2026",anterior.aniosDeuda());
+        assertEquals(0,new BigDecimal("150.00").compareTo(anterior.deudaFacturas()));
+        assertEquals(0,new BigDecimal("26.55").compareTo(anterior.saldoAFavor()));
+        assertEquals(0,new BigDecimal("26.55").compareTo(anterior.creditoDescontado()));
         assertEquals("00042",anterior.numeroPadron()); assertEquals(0,new BigDecimal("123.45").compareTo(anterior.importe()));
         assertEquals(LocalDateTime.of(2026,10,30,12,0),anterior.fechaSincronizacion());
         assertTrue(leida.cuentas().stream().anyMatch(x -> x.origen()==OrigenDatos.SUCIVE && x.importe().signum()==0 && x.estado().equals("SIN_DEUDA_PENDIENTE")));
         var nueva=service.crear(new Crear("Segunda",List.of(new Cuenta("10001",OrigenDatos.INTENDENCIA))),"admin");
         assertEquals(0,new BigDecimal("999.99").compareTo(nueva.cuentas().getFirst().importe()));
+        assertEquals("PAGO",service.obtener(nueva.id()).cuentas().getFirst().motivoUltimoCobro());
         assertTrue(service.listar().stream().anyMatch(x -> x.id().equals(c.id()) && x.cantidadCuentas()==2));
     }
     @Test void cuentaCanceladaSeGuardaConSaldoCeroSinInferirPago() {
@@ -57,11 +65,12 @@ class CapturaPersistenciaTest {
         var d=new Deuda(); d.setPadron(p); d.setEstado(EstadoDeuda.CANCELADA); d.setImporte(new BigDecimal("500")); deudas.save(d);
         var c=service.crear(new Crear("Cancelada",List.of(new Cuenta("10002",OrigenDatos.INTENDENCIA))),"usuario");
         assertEquals(0,c.cuentas().getFirst().importe().signum()); assertEquals("SIN_DEUDA_PENDIENTE",c.cuentas().getFirst().estado());
+        assertNull(c.cuentas().getFirst().cantidadFacturasVencidas()); assertNull(c.cuentas().getFirst().aniosDeuda());
     }
     @Test void seleccionInvalidaNoDejaCapturasParciales() {
         padron("10003",OrigenDatos.INTENDENCIA);
         int cantidad=service.listar().size();
-        assertThrows(RecursoNoEncontradoException.class,() -> service.crear(new Crear("Inválida",List.of(new Cuenta("10003",OrigenDatos.INTENDENCIA),new Cuenta("NO-EXISTE",OrigenDatos.SUCIVE))),"usuario"));
+        assertThrows(RecursoNoEncontradoException.class,() -> service.crear(new Crear("InvÃ¡lida",List.of(new Cuenta("10003",OrigenDatos.INTENDENCIA),new Cuenta("NO-EXISTE",OrigenDatos.SUCIVE))),"usuario"));
         assertEquals(cantidad,service.listar().size());
         assertThrows(ReglaNegocioException.class,() -> service.crear(new Crear("Duplicada",List.of(new Cuenta("10003",OrigenDatos.INTENDENCIA),new Cuenta(" 10003 ",OrigenDatos.INTENDENCIA))),"usuario"));
         assertEquals(cantidad,service.listar().size());

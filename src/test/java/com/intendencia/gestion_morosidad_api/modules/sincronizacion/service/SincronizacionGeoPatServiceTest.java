@@ -31,42 +31,64 @@ class SincronizacionGeoPatServiceTest {
     @Mock GeoPagosClient geoPagosClient;
     @Mock DeudaRepository deudaRepository;
     @Mock SincronizacionDeudasProcessor processor;
+    @Mock PeriodoSincronizacionService periodo;
     SincronizacionDeudasService service;
 
     @BeforeEach void preparar() {
         service = new SincronizacionDeudasService(geoPagosClient, geoPatClient, processor, deudaRepository,
-                Clock.fixed(Instant.parse("2026-10-16T15:00:00Z"), ZoneId.of("America/Montevideo")));
+                Clock.fixed(Instant.parse("2026-10-16T15:00:00Z"), ZoneId.of("America/Montevideo")), periodo);
+        lenient().when(periodo.anioMinimo()).thenReturn(2013);
         ReflectionTestUtils.setField(service, "usuarioApi", "test");
         ReflectionTestUtils.setField(service, "diasCobrosIniciales", 90);
     }
 
     @Test void usaClienteYFechaAnteriorExclusivosDeSUCIVE() {
-        when(geoPatClient.obtenerFacturasPendientes()).thenReturn(new IntendenciaApiResponse<>(List.of(), null));
+        when(geoPatClient.obtenerFacturasPendientes(LocalDate.of(2013,1,1),LocalDate.of(2026,10,16))).thenReturn(new IntendenciaApiResponse<>(List.of(), null));
         when(deudaRepository.ultimaSincronizacionPorOrigen(OrigenDatos.SUCIVE))
                 .thenReturn(Optional.of(LocalDateTime.of(2026,10,10,12,0)));
         when(geoPatClient.obtenerFacturasCanceladas(LocalDate.of(2026,10,9), LocalDate.of(2026,10,17)))
                 .thenReturn(new IntendenciaApiResponse<>(List.of(), null));
         when(geoPatClient.obtenerContribuyentes()).thenReturn(new IntendenciaApiResponse<>(List.of(), null));
         service.sincronizar(OrigenDatos.SUCIVE);
-        verify(processor).procesar(eq(List.of()), eq(List.of()), eq(List.of()), eq(LocalDate.of(2026,10,16)), any(), eq(OrigenDatos.SUCIVE));
+        verify(processor).procesar(eq(List.of()), eq(List.of()), eq(List.of()), eq(LocalDate.of(2026,10,16)), any(), eq(OrigenDatos.SUCIVE), eq(2013));
         verifyNoInteractions(geoPagosClient);
     }
 
+    @ParameterizedTest @org.junit.jupiter.params.provider.ValueSource(booleans={false,true})
+    void publicaEtapasYFinalizaSoloDespuesDelProcesador(boolean falla) {
+        when(geoPatClient.obtenerFacturasPendientes(any(),any())).thenReturn(new IntendenciaApiResponse<>(List.of(),null));
+        when(deudaRepository.ultimaSincronizacionPorOrigen(OrigenDatos.SUCIVE)).thenReturn(Optional.empty());
+        when(geoPatClient.obtenerFacturasCanceladas(any(),any())).thenReturn(new IntendenciaApiResponse<>(List.of(),null));
+        when(geoPatClient.obtenerContribuyentes()).thenReturn(new IntendenciaApiResponse<>(List.of(),null));
+        var eventos=new java.util.ArrayList<com.intendencia.gestion_morosidad_api.integration.intendencia.common.ProgresoSincronizacion>();
+        when(processor.procesar(any(),any(),any(),any(),any(),eq(OrigenDatos.SUCIVE),eq(2013))).thenAnswer(i->{
+            assertThat(eventos.getLast().etapa()).isEqualTo("GUARDANDO");
+            if(falla) throw new IntegracionExternaException("Fallo al confirmar la transacción");
+            return null;
+        });
+        try(var scope=com.intendencia.gestion_morosidad_api.integration.intendencia.common.SeguimientoSincronizacion.abrir(eventos::add)) {
+            if(falla) assertThatThrownBy(()->service.sincronizar(OrigenDatos.SUCIVE)).isInstanceOf(IntegracionExternaException.class);
+            else service.sincronizar(OrigenDatos.SUCIVE);
+        }
+        if(falla) assertThat(eventos).extracting(p->p.etapa()).containsExactly("PREPARANDO","DEUDAS","COBROS","CONTACTOS","GUARDANDO");
+        else assertThat(eventos).extracting(p->p.etapa()).containsExactly("PREPARANDO","DEUDAS","COBROS","CONTACTOS","GUARDANDO","FINALIZADA");
+    }
+
     @Test void respuestaInvalidaNoEscribeYLiberaElBloqueo() {
-        when(geoPatClient.obtenerFacturasPendientes()).thenReturn(null);
+        when(geoPatClient.obtenerFacturasPendientes(LocalDate.of(2013,1,1),LocalDate.of(2026,10,16))).thenReturn(null);
         for (int i=0; i<2; i++)
             assertThatThrownBy(() -> service.sincronizar(OrigenDatos.SUCIVE)).isInstanceOf(IntegracionExternaException.class).hasMessageContaining("GeoPat");
         verifyNoInteractions(processor, deudaRepository, geoPagosClient);
     }
 
     @Test void falloDeContribuyentesNoImpideGuardarDeudasValidas() {
-        when(geoPatClient.obtenerFacturasPendientes()).thenReturn(new IntendenciaApiResponse<>(List.of(), null));
+        when(geoPatClient.obtenerFacturasPendientes(LocalDate.of(2013,1,1),LocalDate.of(2026,10,16))).thenReturn(new IntendenciaApiResponse<>(List.of(), null));
         when(deudaRepository.ultimaSincronizacionPorOrigen(OrigenDatos.SUCIVE)).thenReturn(Optional.empty());
         when(geoPatClient.obtenerFacturasCanceladas(LocalDate.of(2026,7,18), LocalDate.of(2026,10,17)))
                 .thenReturn(new IntendenciaApiResponse<>(List.of(), null));
         when(geoPatClient.obtenerContribuyentes()).thenReturn(null);
         service.sincronizar(OrigenDatos.SUCIVE);
-        verify(processor).procesar(eq(List.of()), eq(List.of()), isNull(), any(), any(), eq(OrigenDatos.SUCIVE));
+        verify(processor).procesar(eq(List.of()), eq(List.of()), isNull(), any(), any(), eq(OrigenDatos.SUCIVE), eq(2013));
     }
 
     @Test void evitaSincronizacionesSimultaneasEntreOrigenes() {
@@ -78,7 +100,7 @@ class SincronizacionGeoPatServiceTest {
     @ParameterizedTest @EnumSource(OrigenDatos.class)
     void falloEnCobrosObligatoriosNoProcesaPendientesYLiberaElBloqueo(OrigenDatos origen) {
         var client = origen == OrigenDatos.SUCIVE ? geoPatClient : geoPagosClient;
-        when(client.obtenerFacturasPendientes()).thenReturn(new IntendenciaApiResponse<>(List.of(), null));
+        when(client.obtenerFacturasPendientes(LocalDate.of(2013,1,1),LocalDate.of(2026,10,16))).thenReturn(new IntendenciaApiResponse<>(List.of(), null));
         when(deudaRepository.ultimaSincronizacionPorOrigen(origen)).thenReturn(Optional.empty());
         when(client.obtenerFacturasCanceladas(any(), any())).thenThrow(new HttpServerErrorException(HttpStatus.GATEWAY_TIMEOUT));
 
