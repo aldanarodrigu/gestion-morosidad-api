@@ -98,7 +98,7 @@ class GestionServiceTest {
         assertThatThrownBy(() -> service.createGestion(request(), "notificador")).isInstanceOf(ReglaNegocioException.class);
         verifyNoInteractions(gestiones);
     }
-    @Test void noGuardaConUsuarioInexistenteOInactivo() {
+    @Test void noGuardaConUsuarioInactivo() {
         referencias(); usuario.setActivo(false);
         when(usuarios.findByUsername("notificador")).thenReturn(Optional.of(usuario));
         assertThatThrownBy(() -> service.createGestion(request(), "notificador")).isInstanceOf(org.springframework.security.access.AccessDeniedException.class);

@@ -1,5 +1,9 @@
 package com.intendencia.gestion_morosidad_api.modules.contribuyente.controller;
 
+import com.intendencia.gestion_morosidad_api.config.SecurityConfig;
+import org.springframework.context.annotation.Import;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -27,8 +31,11 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 @WebMvcTest(ContribuyenteController.class)
-@WithMockUser
+@Import(SecurityConfig.class)
+@WithMockUser(roles = "ANALISTA")
 class ContribuyenteConsultasControllerTest {
+    @MockitoBean JwtDecoder decoder;
+    @MockitoBean JwtAuthenticationConverter converter;
     @MockitoBean private com.intendencia.gestion_morosidad_api.modules.deuda.service.DeudaService deudaService;
 
 

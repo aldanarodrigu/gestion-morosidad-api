@@ -91,7 +91,7 @@ class GestionPersistenciaTest {
     }
     @org.junit.jupiter.params.ParameterizedTest
     @org.junit.jupiter.params.provider.EnumSource(ResultadoGestion.class)
-    void persisteNuevosResultadosYNotificadorPuedeGestionar(ResultadoGestion resultado) throws Exception {
+    void persisteTodosLosResultadosPermitidosConNotificador(ResultadoGestion resultado) throws Exception {
         mvc.perform(post("/api/gestiones").contentType(MediaType.APPLICATION_JSON)
                 .content("{\"deudaId\":" + deudaId + ",\"accionId\":" + accionId + ",\"resultado\":\"" + resultado + "\"}"))
                 .andExpect(status().isCreated()).andExpect(jsonPath("$.resultado").value(resultado.name()));

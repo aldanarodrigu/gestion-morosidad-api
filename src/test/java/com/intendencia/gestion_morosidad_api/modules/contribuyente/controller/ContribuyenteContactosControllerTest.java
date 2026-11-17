@@ -1,11 +1,13 @@
 package com.intendencia.gestion_morosidad_api.modules.contribuyente.controller;
 
+import com.intendencia.gestion_morosidad_api.config.SecurityConfig;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -35,9 +37,11 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 @WebMvcTest(ContribuyenteController.class)
-@Import(ContactoService.class)
+@Import({ContactoService.class, SecurityConfig.class})
 @WithMockUser(roles = "NOTIFICADOR")
 class ContribuyenteContactosControllerTest {
+    @MockitoBean JwtDecoder decoder;
+    @MockitoBean JwtAuthenticationConverter converter;
     @MockitoBean private com.intendencia.gestion_morosidad_api.modules.deuda.service.DeudaService deudaService;
 
 
@@ -102,7 +106,7 @@ class ContribuyenteContactosControllerTest {
             return contacto;
         });
 
-        mockMvc.perform(put("/api/contribuyentes/123/contactos").with(csrf())
+        mockMvc.perform(put("/api/contribuyentes/123/contactos")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"tipoContacto":"EMAIL","valor":"ana@example.test",
@@ -123,7 +127,7 @@ class ContribuyenteContactosControllerTest {
                 .thenReturn(Optional.of(existente));
         when(contactoRepository.save(existente)).thenReturn(existente);
 
-        mockMvc.perform(put("/api/contribuyentes/123/contactos").with(csrf())
+        mockMvc.perform(put("/api/contribuyentes/123/contactos")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"id":7,"tipoContacto":"TELEFONO","valor":"099999999",
@@ -145,7 +149,7 @@ class ContribuyenteContactosControllerTest {
         when(contactoRepository.findByIdAndContribuyente(8L, contribuyente))
                 .thenReturn(Optional.empty());
 
-        mockMvc.perform(put("/api/contribuyentes/123/contactos").with(csrf())
+        mockMvc.perform(put("/api/contribuyentes/123/contactos")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"id":8,"tipoContacto":"TELEFONO","valor":"099999999",
@@ -159,7 +163,7 @@ class ContribuyenteContactosControllerTest {
 
     @Test
     void putInvalidoDevuelve400SinGuardar() throws Exception {
-        mockMvc.perform(put("/api/contribuyentes/123/contactos").with(csrf())
+        mockMvc.perform(put("/api/contribuyentes/123/contactos")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"valor":" ","origen":" "}
@@ -174,8 +178,8 @@ class ContribuyenteContactosControllerTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"NOTIFICADOR", "ANALISTA"})
-    void rolesOperativosPuedenConsultarCrearYEditarContactos(String rol) throws Exception {
+    @ValueSource(strings = {"ADMINISTRADOR", "NOTIFICADOR", "ANALISTA"})
+    void todosLosRolesPuedenConsultarCrearYEditarContactos(String rol) throws Exception {
         Contacto existente = contacto(7L, TipoContacto.EMAIL, "antes@example.test");
         when(contactoRepository.findByContribuyente(contribuyente)).thenReturn(List.of(existente));
         when(contactoRepository.findByIdAndContribuyente(7L, contribuyente))
@@ -188,7 +192,7 @@ class ContribuyenteContactosControllerTest {
         mockMvc.perform(get("/api/contribuyentes/123/contactos").with(user("operador").roles(rol)))
                 .andExpect(status().isOk());
         mockMvc.perform(put("/api/contribuyentes/123/contactos")
-                        .with(user("operador").roles(rol)).with(csrf())
+                        .with(user("operador").roles(rol))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"tipoContacto":"TELEFONO","valor":"099111111",
@@ -197,7 +201,7 @@ class ContribuyenteContactosControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(8));
         mockMvc.perform(put("/api/contribuyentes/123/contactos")
-                        .with(user("operador").roles(rol)).with(csrf())
+                        .with(user("operador").roles(rol))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"id":7,"tipoContacto":"EMAIL","valor":" nuevo@example.test ",
@@ -214,7 +218,7 @@ class ContribuyenteContactosControllerTest {
     void rechazaValoresQueSuperanElLimiteDeLaBase(String campo) throws Exception {
         String valor = campo.equals("valor") ? "a".repeat(256) : "099111111";
         String origen = campo.equals("origen") ? "a".repeat(256) : "MANUAL";
-        mockMvc.perform(put("/api/contribuyentes/123/contactos").with(csrf())
+        mockMvc.perform(put("/api/contribuyentes/123/contactos")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"tipoContacto":"TELEFONO","valor":"%s",

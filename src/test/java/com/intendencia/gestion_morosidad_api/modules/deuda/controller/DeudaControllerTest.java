@@ -1,10 +1,13 @@
 package com.intendencia.gestion_morosidad_api.modules.deuda.controller;
 
+import com.intendencia.gestion_morosidad_api.config.SecurityConfig;
+import org.springframework.context.annotation.Import;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -29,8 +32,11 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 @WebMvcTest(DeudaController.class)
-@WithMockUser
+@Import(SecurityConfig.class)
+@WithMockUser(roles = "ADMINISTRADOR")
 class DeudaControllerTest {
+    @MockitoBean JwtDecoder decoder;
+    @MockitoBean JwtAuthenticationConverter converter;
 
     @Autowired
     private MockMvc mockMvc;
@@ -115,7 +121,7 @@ class DeudaControllerTest {
     void actualizarEstadoDevuelveLaDeudaActualizada() throws Exception {
         when(deudaService.actualizarEstado(1L, EstadoDeuda.EN_GESTION)).thenReturn(deuda(1L));
 
-        mockMvc.perform(put("/api/deudas/1/estado").with(csrf())
+        mockMvc.perform(put("/api/deudas/1/estado")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"estado\":\"EN_GESTION\"}"))
                 .andExpect(status().isOk())
@@ -124,7 +130,7 @@ class DeudaControllerTest {
 
     @Test
     void actualizarEstadoSinEstadoDevuelve400ConDetalleDelCampo() throws Exception {
-        mockMvc.perform(put("/api/deudas/1/estado").with(csrf())
+        mockMvc.perform(put("/api/deudas/1/estado")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
                 .andExpect(status().isBadRequest())
@@ -133,7 +139,7 @@ class DeudaControllerTest {
 
     @Test
     void actualizarEstadoConValorInexistenteDevuelve400() throws Exception {
-        mockMvc.perform(put("/api/deudas/1/estado").with(csrf())
+        mockMvc.perform(put("/api/deudas/1/estado")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"estado\":\"PAGADA\"}"))
                 .andExpect(status().isBadRequest());
@@ -147,5 +153,28 @@ class DeudaControllerTest {
                 .contribuyente(new ContribuyenteResponse("CM-" + id, "Persona de ejemplo", "1234567-8"))
                 .estado(EstadoDeuda.PENDIENTE)
                 .build();
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings={"NOTIFICADOR","ANALISTA"})
+    void otrosRolesConsultanPeroNoCambianElEstado(String rol) throws Exception {
+        var usuario=org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user("lector").roles(rol);
+        when(deudaService.listar(any(),any())).thenReturn(new PaginaResponse<>(List.of(),0,20,0,0));
+        mockMvc.perform(get("/api/deudas").with(usuario)).andExpect(status().isOk());
+        mockMvc.perform(put("/api/deudas/1/estado").with(usuario).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"estado\":\"EN_GESTION\"}")).andExpect(status().isForbidden());
+        org.mockito.Mockito.verify(deudaService,org.mockito.Mockito.never()).actualizarEstado(any(),any());
+    }
+    @Test void unUsuarioSinRolDelSistemaNoPuedeConsultar() throws Exception {
+        mockMvc.perform(get("/api/deudas").with(
+                org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user("ajeno").roles("USER")))
+                .andExpect(status().isForbidden());
+        org.mockito.Mockito.verifyNoInteractions(deudaService);
+    }
+    @Test void exigeAutenticacionParaConsultar() throws Exception {
+        mockMvc.perform(get("/api/deudas").with(
+                org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.anonymous()))
+                .andExpect(status().isUnauthorized());
+        org.mockito.Mockito.verifyNoInteractions(deudaService);
     }
 }
