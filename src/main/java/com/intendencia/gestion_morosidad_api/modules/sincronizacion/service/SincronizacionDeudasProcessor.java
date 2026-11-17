@@ -93,6 +93,12 @@ class SincronizacionDeudasProcessor {
 
         if (anioMinimo != null) {
             LocalDate desdePeriodo = LocalDate.of(anioMinimo, 1, 1);
+            if (pendientes.isEmpty() && ctx.deudasPorCm.values().stream().anyMatch(d -> activaEnPeriodo(d, desdePeriodo, hoy))) {
+                // Misma protección que sin período: una respuesta vacía por error del origen
+                // sacaría del período todas las deudas activas.
+                throw new IntegracionExternaException(
+                        origen.proveedor() + " no devolvió deudas pendientes del período; no se aplicaron cambios. Verificar el servicio.");
+            }
             if (pendientes.stream().anyMatch(f -> f == null || f.deudaDesde() == null || f.deudaDesde().isBefore(desdePeriodo) || !f.deudaDesde().isBefore(hoy)))
                 throw new IntegracionExternaException("La API devolvió vencimientos fuera del período solicitado; no se aplicaron cambios.");
         }
@@ -108,7 +114,9 @@ class SincronizacionDeudasProcessor {
             }
         }
         else {
-            if (ctx.cmsImportados.size() != pendientes.size())
+            // Un saldo no positivo es una omisión válida (la deuda se cancela); un registro
+            // incompleto o repetido sigue rechazando la respuesta.
+            if (ctx.cmsImportados.size() + ctx.cmsSinSaldo.size() != pendientes.size())
                 throw new IntegracionExternaException("La respuesta del período contiene registros incompletos; no se aplicaron cambios.");
             for (var entry : ctx.deudasPorCm.entrySet()) {
                 var deuda = entry.getValue();
@@ -180,6 +188,7 @@ class SincronizacionDeudasProcessor {
 
                 cancelarDeuda(existente, ctx);
             }
+            ctx.cmsSinSaldo.add(cm);
             ctx.omitir("CM " + cm + ": sin deuda vencida positiva");
             return;
         }
@@ -344,6 +353,13 @@ class SincronizacionDeudasProcessor {
         }
     }
 
+    /** Deuda no cancelada, incluida en el período y con vencimiento dentro de él. */
+    private static boolean activaEnPeriodo(Deuda deuda, LocalDate desdePeriodo, LocalDate hoy) {
+        return deuda.getEstado() != EstadoDeuda.CANCELADA && deuda.isEnPeriodoGestion()
+                && deuda.getDeudaDesde() != null && !deuda.getDeudaDesde().isBefore(desdePeriodo)
+                && deuda.getDeudaDesde().isBefore(hoy);
+    }
+
     /** Una deuda que ya no aparece en pendientes dejÃ³ de estar vencida e impaga. */
     private void cancelarDeudasQueYaNoEstanPendientes(Contexto ctx) {
         ctx.deudasPorCm.forEach((cm, deuda) -> {
@@ -436,6 +452,8 @@ class SincronizacionDeudasProcessor {
         final Set<String> cmsProcesados = new HashSet<>();
         /** CM con deuda positiva que quedaron guardados en esta corrida. */
         final Set<String> cmsImportados = new HashSet<>();
+        /** CM informados con saldo cero o negativo: omitidos sin que falten datos. */
+        final Set<String> cmsSinSaldo = new HashSet<>();
         final List<Tributo> tributosNuevos = new ArrayList<>();
         final List<Contribuyente> contribuyentesNuevos = new ArrayList<>();
         final List<Dato> contactosPendientes = new ArrayList<>();

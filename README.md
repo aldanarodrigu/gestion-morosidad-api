@@ -167,10 +167,15 @@ advertencias con el motivo de cada omisión (solo CM, sin datos personales).
 - Un cobro histórico puede completar un documento ausente, pero no reemplaza uno existente.
   Si trae un documento diferente, conserva los datos del titular actual y registra el cobro.
 - Si GeoPagos devuelve 0 deudas habiendo deudas activas, no se aplica ningún cambio (protege de
-  una respuesta vacía por error del origen).
+  una respuesta vacía por error del origen). Con período configurado, la protección se aplica si
+  hay deudas no canceladas con `DEUDA_DESDE` dentro del período.
+- Con período, una fila con saldo cero o negativo es una omisión válida (cancela la deuda
+  existente). Una fila incompleta (sin padrón o importe nulo) o un CM repetido rechazan toda la
+  respuesta sin aplicar cambios.
 - La sincronizacion de contactos solo agrega datos faltantes por contribuyente, tipo y fuente.
   No sobrescribe ni elimina contactos existentes, incluidos los importados que se hayan corregido
-  manualmente. Los valores vacios de la API se ignoran; no se crean contactos vacios.
+  manualmente. Los valores vacios de la API se ignoran; no se crean contactos vacios, y un padrón
+  sin dato no descarta el que trae otro padrón del mismo contribuyente.
 
 ### Verificacion de sincronizacion
 
@@ -181,6 +186,25 @@ Ocho casos reprodujeron fallos antes de corregirlos. Tras las correcciones, la s
 del backend ejecuto 299 pruebas sin fallos ni omitidas, usando exclusivamente PostgreSQL
 desechable. Tambien se verificaron los valores predeterminados y personalizados de la
 configuracion automatica en Docker Compose.
+
+Pruebas del procesador (17/11/2026):
+
+- `SincronizacionDeudasProcessorReglasTest` (unitaria, sin base): estados del CU 2.17,
+  protección ante respuestas vacías, CM repetidos o numéricos, tributos, límites de los
+  segmentos, cobros e identidad del contribuyente.
+- `SincronizacionCasosRealesPersistenciaTest` (PostgreSQL desechable, solo con
+  `SINCRONIZACION_TEST_DB_URL`): dos días de sincronización con respuestas que tienen la forma
+  real de GeoPagos (`src/test/resources/sincronizacion/casos-reales`, datos ficticios) y el
+  flujo del servicio con período. Encontraron y quedaron corregidos tres fallos: contactos de
+  un padrón vacío que descartaban los de otro padrón de la misma persona, falta de protección
+  ante respuestas vacías con período, y rechazo de toda la sincronización con período cuando
+  una fila traía saldo cero.
+
+```bash
+docker exec morosidad-local createdb -U morosidad sincronizacion_test
+SINCRONIZACION_TEST_DB_URL=jdbc:postgresql://localhost:5434/sincronizacion_test \
+  ./mvnw test -Dtest=SincronizacionCasosRealesPersistenciaTest
+```
 
 ### Tiempos medidos (08/10/2026, datos reales)
 

@@ -180,8 +180,9 @@ class GeoPatPersistenciaTest {
         var server = MockRestServiceServer.bindTo(builder).build();
         var client = new GeoPatClient(new IntendenciaPaginador(builder.build(), 1000));
         server.expect(queryParam("page", "1")).andRespond(withSuccess(pagina(123, 1), MediaType.APPLICATION_JSON));
-        server.expect(queryParam("page", "2")).andRespond(withSuccess(pagina(124, 2).replace("2025-01-01", "0000-00-00"), MediaType.APPLICATION_JSON));
-        when(geoPatClient.obtenerFacturasPendientes()).thenAnswer(inv -> client.obtenerFacturasPendientes());
+        server.expect(queryParam("page", "2")).andRespond(withSuccess(pagina(124, 2).replace("2025-01-01", "2025-06-01"), MediaType.APPLICATION_JSON));
+        when(geoPatClient.obtenerFacturasPendientes(any(), any()))
+                .thenAnswer(inv -> client.obtenerFacturasPendientes(inv.getArgument(0), inv.getArgument(1)));
         when(geoPatClient.obtenerFacturasCanceladas(any(), any())).thenReturn(new IntendenciaApiResponse<>(List.of(), null));
         when(geoPatClient.obtenerContribuyentes()).thenReturn(new IntendenciaApiResponse<>(List.of(), null));
         mvc.perform(post("/api/sincronizaciones/deudas").param("origen", "SUCIVE")).andExpect(status().isOk());
@@ -189,8 +190,8 @@ class GeoPatPersistenciaTest {
         var deuda = deudas.findByPadronCmAndPadronOrigen("124", OrigenDatos.SUCIVE).orElseThrow();
         assertThat(deuda.getEstado()).isEqualTo(EstadoDeuda.PENDIENTE);
         assertThat(deuda.getImporte()).isEqualByComparingTo("50");
-        assertThat(deuda.getDeudaDesde()).isNull();
-        assertThat(deuda.getSegmentoMora()).isNull();
+        assertThat(deuda.getDeudaDesde()).isEqualTo(LocalDate.of(2025, 6, 1));
+        assertThat(deuda.isEnPeriodoGestion()).isTrue();
         assertThat(deudas.findByPadronCmAndPadronOrigen("123", OrigenDatos.INTENDENCIA).orElseThrow().getImporte()).isEqualByComparingTo("60");
         server.verify();
     }
@@ -201,8 +202,11 @@ class GeoPatPersistenciaTest {
         var server = MockRestServiceServer.bindTo(builder).build();
         var client = new GeoPatClient(new IntendenciaPaginador(builder.build(), 1000));
         server.expect(queryParam("page", "1")).andRespond(withSuccess(pagina(123, 1), MediaType.APPLICATION_JSON));
-        server.expect(queryParam("page", "2")).andRespond(withStatus(HttpStatus.GATEWAY_TIMEOUT));
-        when(geoPatClient.obtenerFacturasPendientes()).thenAnswer(inv -> client.obtenerFacturasPendientes());
+        // El paginador reintenta dos veces los 504 antes de fallar.
+        server.expect(org.springframework.test.web.client.ExpectedCount.times(3), queryParam("page", "2"))
+                .andRespond(withStatus(HttpStatus.GATEWAY_TIMEOUT));
+        when(geoPatClient.obtenerFacturasPendientes(any(), any()))
+                .thenAnswer(inv -> client.obtenerFacturasPendientes(inv.getArgument(0), inv.getArgument(1)));
         mvc.perform(post("/api/sincronizaciones/deudas").param("origen", "SUCIVE")).andExpect(status().isBadGateway());
         em.flush(); em.clear();
         assertThat(deudas.count()).isEqualTo(1);
@@ -214,7 +218,7 @@ class GeoPatPersistenciaTest {
     }
 
     @Test void endpointAdminSincronizaGeoPatYDevuelveOrigenEnLaCartera() throws Exception {
-        when(geoPatClient.obtenerFacturasPendientes()).thenReturn(new IntendenciaApiResponse<>(List.of(fila(999, "PAT", "1", "10", null)), null));
+        when(geoPatClient.obtenerFacturasPendientes(any(), any())).thenReturn(new IntendenciaApiResponse<>(List.of(fila(999, "PAT", "1", "10", null)), null));
         when(geoPatClient.obtenerFacturasCanceladas(any(), any())).thenReturn(new IntendenciaApiResponse<>(List.of(), null));
         when(geoPatClient.obtenerContribuyentes()).thenReturn(new IntendenciaApiResponse<>(List.of(), null));
         mvc.perform(post("/api/sincronizaciones/deudas").param("origen", "SUCIVE").contentType(MediaType.APPLICATION_JSON))
