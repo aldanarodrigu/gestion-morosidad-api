@@ -62,4 +62,17 @@ class GestionControllerTest {
         mvc.perform(post("/api/gestiones").with(csrf()).contentType(MediaType.APPLICATION_JSON).content(body.replace(":10", ":-10")))
                 .andExpect(status().isBadRequest()); verifyNoInteractions(service);
     }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings={"deudaCero","accionCero","accionNegativa","resultadoNulo"})
+    void rechazaPayloadInvalidoSinInvocarServicio(String caso) throws Exception {
+        String contenido=switch(caso) {
+            case "deudaCero" -> body.replace("\"deudaId\":10","\"deudaId\":0");
+            case "accionCero" -> body.replace("\"accionId\":2","\"accionId\":0");
+            case "accionNegativa" -> body.replace("\"accionId\":2","\"accionId\":-2");
+            default -> body.replace("\"EXITOSA\"","null");
+        };
+        mvc.perform(post("/api/gestiones").with(csrf()).contentType(MediaType.APPLICATION_JSON).content(contenido))
+                .andExpect(status().isBadRequest());verifyNoInteractions(service);
+    }
 }

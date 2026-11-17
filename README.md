@@ -285,7 +285,7 @@ Ejemplo de cuerpo de registro:
 ```
 
 - Resultados: `EXITOSA`, `NO_LOCALIZADO`, `RECHAZADA`, `PENDIENTE`, `RESPONDIO`, `NO_RESPONDIO`, `PROXIMO_A_VENIR`.
-- Observación opcional, máximo 255 caracteres. Deuda y acción deben existir; no se admiten acciones inactivas.
+- Observación opcional, máximo 255 caracteres. Deuda y acción deben existir; no se admiten acciones inactivas. La acción debe estar vinculada al segmento de mora actual de la deuda; sin segmento o fuera del período de gestión se rechaza el registro.
 - Fecha y autor se obtienen del servidor y del usuario autenticado. El campo anterior `fecha` se acepta
   por compatibilidad, pero no modifica la fecha registrada. No se admite un autor elegido por el cliente.
 - Registrar no cambia automáticamente el estado de la deuda.

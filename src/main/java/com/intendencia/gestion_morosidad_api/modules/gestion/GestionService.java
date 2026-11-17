@@ -86,6 +86,10 @@ public class GestionService {
                 .filter(u -> Boolean.TRUE.equals(u.getActivo()))
                 .orElseThrow(() -> new AccessDeniedException("Usuario no habilitado"));
         if (!deuda.isEnPeriodoGestion()) throw new ReglaNegocioException("El padrón está fuera del período de gestión. Sincronizá el período correspondiente antes de registrar gestiones.");
+        if (deuda.getSegmentoMora() == null || !accionSegmentoRepository.existsByAccion_IdAndSegmentoMora_Id(
+                accion.getId(), deuda.getSegmentoMora().getId())) {
+            throw new ReglaNegocioException("La acción no corresponde al segmento de mora actual de la deuda");
+        }
         Gestion gestion = new Gestion();
         gestion.setUsuario(usuario);
 

@@ -46,6 +46,7 @@ class GestionPersistenciaTest {
     @Autowired com.intendencia.gestion_morosidad_api.modules.segmento.repository.SegmentoMoraRepository segmentos;
     @Autowired com.intendencia.gestion_morosidad_api.modules.accion_segmento.AccionSegmentoRepository vinculos;
     @Autowired jakarta.persistence.EntityManager em;
+    @Autowired java.time.Clock clock;
     Long deudaId;
     Long otraDeudaId;
     Long accionId;
@@ -54,6 +55,11 @@ class GestionPersistenciaTest {
         Contribuyente c = new Contribuyente(); c.setNombre("Prueba gestiones"); c.setDocumento("prueba"); contribuyentes.saveAndFlush(c);
         deudaId = deuda(c, "test-1"); otraDeudaId = deuda(c, "test-2");
         Accion a = new Accion(); a.setNombre("Acción de prueba integración"); accionId = acciones.saveAndFlush(a).getId();
+        var mora=segmentos.findAllByOrderByOrdenAsc().get(0);
+        var vinculo=new com.intendencia.gestion_morosidad_api.modules.accion_segmento.AccionSegmento();
+        vinculo.setAccion(a);vinculo.setSegmentoMora(mora);vinculos.saveAndFlush(vinculo);
+        deudas.findById(deudaId).orElseThrow().setSegmentoMora(mora);
+        deudas.findById(otraDeudaId).orElseThrow().setSegmentoMora(mora);deudas.flush();
     }
     Long deuda(Contribuyente c, String cm) {
         Padron p = new Padron(); p.setCm(cm); p.setNumeroPadron(cm); p.setContribuyente(c); padrones.saveAndFlush(p);
@@ -84,13 +90,13 @@ class GestionPersistenciaTest {
         assertThat(gestiones.findByDeuda_IdOrderByFechaDescIdDesc(deudaId)).isEmpty();
     }
     @org.junit.jupiter.params.ParameterizedTest
-    @org.junit.jupiter.params.provider.ValueSource(strings = {"RESPONDIO", "NO_RESPONDIO", "PROXIMO_A_VENIR"})
-    void persisteNuevosResultadosYNotificadorPuedeGestionar(String resultado) throws Exception {
+    @org.junit.jupiter.params.provider.EnumSource(ResultadoGestion.class)
+    void persisteNuevosResultadosYNotificadorPuedeGestionar(ResultadoGestion resultado) throws Exception {
         mvc.perform(post("/api/gestiones").contentType(MediaType.APPLICATION_JSON)
                 .content("{\"deudaId\":" + deudaId + ",\"accionId\":" + accionId + ",\"resultado\":\"" + resultado + "\"}"))
-                .andExpect(status().isCreated()).andExpect(jsonPath("$.resultado").value(resultado));
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.resultado").value(resultado.name()));
         assertThat(gestiones.findByDeuda_IdOrderByFechaDescIdDesc(deudaId)).singleElement()
-                .satisfies(g -> assertThat(g.getResultado().name()).isEqualTo(resultado));
+                .satisfies(g -> assertThat(g.getResultado()).isEqualTo(resultado));
     }
     @Test @org.springframework.security.test.context.support.WithAnonymousUser
     void noPermiteRegistrarSinSesion() throws Exception {
@@ -99,6 +105,7 @@ class GestionPersistenciaTest {
         assertThat(gestiones.findByDeuda_IdOrderByFechaDescIdDesc(deudaId)).isEmpty();
     }
     @Test void deudaSinSegmentoRespondeSinAcciones() throws Exception {
+        deudas.findById(deudaId).orElseThrow().setSegmentoMora(null);deudas.flush();
         mvc.perform(get("/api/gestiones/deuda/" + deudaId + "/acciones-disponibles"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(0));
     }
@@ -152,4 +159,58 @@ class GestionPersistenciaTest {
         assertThat(vinculos.count()).isEqualTo(asociaciones);
     }
 
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings={"sinSegmento","otroSegmento","fueraPeriodo"})
+    void rechazaRegistroInvalidoSinInsertarNiCambiarSaldo(String caso) throws Exception {
+        var d=deudas.findById(deudaId).orElseThrow();
+        if(caso.equals("sinSegmento"))d.setSegmentoMora(null);
+        if(caso.equals("otroSegmento"))d.setSegmentoMora(segmentos.findAllByOrderByOrdenAsc().get(1));
+        if(caso.equals("fueraPeriodo"))d.setEnPeriodoGestion(false);
+        deudas.flush();long antes=gestiones.count();
+        mvc.perform(post("/api/gestiones").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"deudaId\":"+deudaId+",\"accionId\":"+accionId+",\"resultado\":\"EXITOSA\"}"))
+                .andExpect(status().isBadRequest());
+        assertThat(gestiones.count()).isEqualTo(antes);
+        assertThat(deudas.findById(deudaId).orElseThrow().getImporte()).isEqualByComparingTo(BigDecimal.TEN);
+    }
+    @Test void cambioDeMoraYDesactivacionNoOcultanElHistorialAnterior() throws Exception {
+        registrar(deudaId,"antes del cambio");
+        acciones.findById(accionId).orElseThrow().setActivo(false);
+        deudas.findById(deudaId).orElseThrow().setSegmentoMora(segmentos.findAllByOrderByOrdenAsc().get(1));
+        acciones.flush();deudas.flush();em.clear();
+        mvc.perform(get("/api/gestiones/deuda/"+deudaId)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1)).andExpect(jsonPath("$[0].observacion").value("antes del cambio"));
+    }
+    @Test void fechaDelClienteNoReemplazaLaDelServidorYAdmite255Caracteres() throws Exception {
+        var antes=java.time.LocalDateTime.now(clock);
+        mvc.perform(post("/api/gestiones").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"deudaId\":"+deudaId+",\"accionId\":"+accionId+",\"resultado\":\"EXITOSA\",\"fecha\":\"2000-01-01T00:00:00\",\"observacion\":\""+"x".repeat(255)+"\"}"))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.usuarioNombre").value("gestion-test"));
+        em.flush();em.clear();
+        assertThat(gestiones.findByDeuda_IdOrderByFechaDescIdDesc(deudaId)).singleElement().satisfies(g->{
+            assertThat(g.getFecha()).isAfterOrEqualTo(antes.minusSeconds(1));
+            assertThat(g.getObservacion()).hasSize(255);
+        });
+    }
+    @Test void empateDeFechaSeOrdenaPorIdDescendente() throws Exception {
+        registrar(deudaId,"primera");registrar(deudaId,"segunda");
+        var todas=gestiones.findByDeuda_IdOrderByFechaDescIdDesc(deudaId);
+        var fecha=java.time.LocalDateTime.of(2026,11,17,12,0);todas.forEach(g->g.setFecha(fecha));
+        gestiones.flush();em.clear();
+        mvc.perform(get("/api/gestiones/deuda/"+deudaId)).andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].observacion").value("segunda"))
+                .andExpect(jsonPath("$[1].observacion").value("primera"));
+    }
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings={"ADMINISTRADOR","ANALISTA"})
+    void otrosRolesConsultanPeroNoRegistran(String rol) throws Exception {
+        registrar(deudaId,"solo lectura");long antes=gestiones.count();
+        var u=org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user("lector").roles(rol);
+        mvc.perform(get("/api/gestiones/deuda/"+deudaId).with(u)).andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(1));
+        mvc.perform(post("/api/gestiones").with(u).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"deudaId\":"+deudaId+",\"accionId\":"+accionId+",\"resultado\":\"EXITOSA\"}"))
+                .andExpect(status().isForbidden());
+        assertThat(gestiones.count()).isEqualTo(antes);
+    }
 }
