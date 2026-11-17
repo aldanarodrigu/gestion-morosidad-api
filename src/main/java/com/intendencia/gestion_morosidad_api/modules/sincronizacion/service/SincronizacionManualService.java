@@ -24,20 +24,20 @@ public class SincronizacionManualService {
     private AtomicBoolean cancelacion;
     private boolean aceptaCancelacion;
     private boolean activa() { return ultima != null && (ultima.estado().equals("EN_CURSO") || ultima.estado().equals("CANCELANDO")); }
-    public record Ejecucion(String estado, OrigenDatos origen, int anioMinimo, LocalDateTime inicio,
+    public record Ejecucion(String estado, OrigenDatos origen, Integer anioMinimo, LocalDateTime inicio,
         LocalDateTime fin, String mensaje, ResultadoSincronizacion resultado, ProgresoSincronizacion progreso) {
-        public Ejecucion(String estado, OrigenDatos origen, int anioMinimo, LocalDateTime inicio,
+        public Ejecucion(String estado, OrigenDatos origen, Integer anioMinimo, LocalDateTime inicio,
                 LocalDateTime fin, String mensaje, ResultadoSincronizacion resultado) {
             this(estado,origen,anioMinimo,inicio,fin,mensaje,resultado,null);
         }
     }
-    public synchronized void guardar(int anio) {
+    public synchronized void guardar(Integer anio) {
         if (activa()) throw new OperacionEnCursoException("Ya hay una sincronización en curso.");
         sincronizacion.guardarAnio(anio);
     }
     public synchronized Ejecucion iniciar(OrigenDatos origen) {
         if (activa()) throw new OperacionEnCursoException("Ya hay una sincronización manual en curso.");
-        int anio = periodo.anioMinimo();
+        Integer anio = periodo.anioMinimo();
         var inicio = LocalDateTime.now(clock);
         var token = new AtomicBoolean(false);
         cancelacion = token; aceptaCancelacion = true;
@@ -65,7 +65,7 @@ public class SincronizacionManualService {
         });
         return ultima;
     }
-    private synchronized void actualizarProgreso(OrigenDatos origen, int anio, LocalDateTime inicio,
+    private synchronized void actualizarProgreso(OrigenDatos origen, Integer anio, LocalDateTime inicio,
             AtomicBoolean token, ProgresoSincronizacion progreso) {
         // La solicitud de cancelación y el comienzo del guardado comparten el mismo bloqueo.
         if (token.get()) throw new CancellationException();

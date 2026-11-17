@@ -811,3 +811,9 @@ El seguimiento se aísla por hilo y se libera al finalizar, para no mezclar tare
 Administrador puede solicitar `POST /api/sincronizaciones/ejecucion/cancelar`, también disponible como **Cancelar sincronización** en la pestaña. La tarea pasa a `CANCELANDO` y conserva bloqueados el inicio y el cambio de año hasta que el trabajador termina. Si una petición externa sigue activa, se espera su respuesta o timeout; después se descarta lo descargado y se confirma `CANCELADA`, sin procesar ni guardar deudas. No se interrumpe el hilo ni se libera prematuramente el bloqueo.
 
 La cancelación y el comienzo de **Guardado** se coordinan atómicamente. Una vez iniciada esa etapa, el botón se deshabilita y el backend rechaza cancelar; se deja finalizar la transacción para evitar anunciar una cancelación después de confirmar cambios. La cancelación es idempotente si la tarea ya terminó. No cancela trabajos automáticos ni los iniciados mediante el endpoint síncrono anterior.
+
+### Sincronizacion sin anio minimo
+
+En Configuracion > Sincronizacion se puede dejar el anio minimo vacio y guardar el periodo. El API acepta `{"anioMinimo":null}` (o el campo omitido) y persiste NULL, sin alterar el anio configurado al instalar la migracion `V202611161000__sincronizacion_sin_anio_minimo.sql`. Se aplica tanto a ejecuciones manuales como automaticas.
+
+Sin limite se omite `fecha_inicio`, se conserva `fecha_corte` y se envia `include_total=0` en todas las paginas y reintentos de pendientes. Las deudas antiguas recibidas vuelven a estar incluidas en cartera. La descarga completa conserva la conciliacion existente de cuentas ausentes y la proteccion contra respuestas vacias inesperadas. Guardar el periodo no inicia una sincronizacion ni modifica deudas.

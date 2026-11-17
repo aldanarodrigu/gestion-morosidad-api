@@ -10,9 +10,9 @@ import com.intendencia.gestion_morosidad_api.shared.exception.ReglaNegocioExcept
 public class PeriodoSincronizacionService {
     private final JdbcTemplate jdbc;
     private final Clock clock;
-    public int anioMinimo() { return jdbc.queryForObject("SELECT anio_minimo FROM configuracion_sincronizacion WHERE id=1", Integer.class); }
-    public void guardar(int anio) {
-        if (anio < 1900 || anio > LocalDate.now(clock).getYear())
+    public Integer anioMinimo() { return jdbc.queryForObject("SELECT anio_minimo FROM configuracion_sincronizacion WHERE id=1", Integer.class); }
+    public void guardar(Integer anio) {
+        if (anio != null && (anio < 1900 || anio > LocalDate.now(clock).getYear()))
             throw new ReglaNegocioException("El año mínimo debe estar entre 1900 y el año actual.");
         jdbc.update("UPDATE configuracion_sincronizacion SET anio_minimo=? WHERE id=1",anio);
     }

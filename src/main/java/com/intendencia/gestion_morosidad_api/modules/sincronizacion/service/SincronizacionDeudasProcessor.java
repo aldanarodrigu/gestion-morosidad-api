@@ -99,7 +99,14 @@ class SincronizacionDeudasProcessor {
         for (GeoPagosFacturaPendienteDto fila : pendientes) {
             procesarPendiente(fila, ctx);
         }
-        if (anioMinimo == null) cancelarDeudasQueYaNoEstanPendientes(ctx);
+        if (anioMinimo == null) {
+            cancelarDeudasQueYaNoEstanPendientes(ctx);
+            for (String cm : ctx.cmsImportados) {
+                var deuda = ctx.deudasPorCm.get(cm);
+                deuda.setEnPeriodoGestion(true);
+                deuda.setAnioPeriodo(null);
+            }
+        }
         else {
             if (ctx.cmsImportados.size() != pendientes.size())
                 throw new IntegracionExternaException("La respuesta del período contiene registros incompletos; no se aplicaron cambios.");

@@ -14,7 +14,7 @@ public class GeoPagosClient implements IntendenciaClient {
     private final IntendenciaPaginador paginador;
 
     @Override public IntendenciaApiResponse<GeoPagosFacturaPendienteDto> obtenerFacturasPendientes(LocalDate desde, LocalDate hasta) {
-        return paginador.obtenerSinTotal("/api/v1/utec/facturas/pendientes", Map.of("fecha_inicio", desde.toString(), "fecha_corte", hasta.toString()),
+        return paginador.obtenerSinTotal("/api/v1/utec/facturas/pendientes", desde == null ? Map.of("fecha_corte", hasta.toString()) : Map.of("fecha_inicio", desde.toString(), "fecha_corte", hasta.toString()),
                 new ParameterizedTypeReference<>() {}, GeoPagosFacturaPendienteDto::cm);
     }
 

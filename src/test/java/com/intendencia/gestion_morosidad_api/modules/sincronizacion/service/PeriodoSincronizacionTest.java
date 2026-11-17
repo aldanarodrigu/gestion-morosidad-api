@@ -5,6 +5,13 @@ import java.time.*;
 import static org.mockito.Mockito.*;
 import static org.assertj.core.api.Assertions.*;
 class PeriodoSincronizacionTest {
+ @Test void permiteGuardarYLeerSinLimite(){
+  var jdbc=mock(JdbcTemplate.class);var s=new PeriodoSincronizacionService(jdbc,Clock.systemUTC());
+  s.guardar(null);verify(jdbc).update("UPDATE configuracion_sincronizacion SET anio_minimo=? WHERE id=1",(Object)null);
+  when(jdbc.queryForObject("SELECT anio_minimo FROM configuracion_sincronizacion WHERE id=1",Integer.class)).thenReturn(null);
+  assertThat(s.anioMinimo()).isNull();
+ }
+
  @Test void guardaSoloAnosValidos(){
   var jdbc=mock(JdbcTemplate.class);var s=new PeriodoSincronizacionService(jdbc,Clock.fixed(Instant.parse("2026-11-11T12:00:00Z"),ZoneOffset.UTC));
   s.guardar(2013);verify(jdbc).update("UPDATE configuracion_sincronizacion SET anio_minimo=? WHERE id=1",2013);

@@ -57,7 +57,7 @@ public class SincronizacionDeudasService {
         return sincronizar(OrigenDatos.INTENDENCIA);
     }
 
-    public synchronized void guardarAnio(int anio) {
+    public synchronized void guardarAnio(Integer anio) {
         if (enCurso.get()) throw new OperacionEnCursoException("No se puede cambiar el período durante una sincronización.");
         periodo.guardar(anio);
     }
@@ -66,7 +66,7 @@ public class SincronizacionDeudasService {
         return sincronizar(origen, periodo.anioMinimo());
     }
 
-    public ResultadoSincronizacion sincronizar(OrigenDatos origen, int anioMinimo) {
+    public ResultadoSincronizacion sincronizar(OrigenDatos origen, Integer anioMinimo) {
         java.util.Objects.requireNonNull(origen);
         IntendenciaClient client = origen == OrigenDatos.SUCIVE ? geoPatClient : geoPagosClient;
         if (usuarioApi == null || usuarioApi.isBlank()) {
@@ -80,7 +80,7 @@ public class SincronizacionDeudasService {
             LocalDateTime inicio = LocalDateTime.now(clock);
             LocalDate hoy = inicio.toLocalDate();
 
-            LocalDate inicioPeriodo = LocalDate.of(anioMinimo, 1, 1);
+            LocalDate inicioPeriodo = anioMinimo == null ? null : LocalDate.of(anioMinimo, 1, 1);
             SeguimientoSincronizacion.etapa("DEUDAS",0);
             List<GeoPagosFacturaPendienteDto> pendientes =
                     consultar(origen, "facturas pendientes", () -> client.obtenerFacturasPendientes(inicioPeriodo, hoy));

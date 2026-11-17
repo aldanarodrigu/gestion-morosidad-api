@@ -14,6 +14,16 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 import static org.assertj.core.api.Assertions.*;
 class PeriodoIntendenciaClientTest {
  @ParameterizedTest @EnumSource(OrigenDatos.class)
+ void sinAnioOmiteFechaInicioYConservaConteoDesactivado(OrigenDatos origen){
+  var b=RestClient.builder().baseUrl("https://test.invalid");var server=MockRestServiceServer.bindTo(b).build();var paginador=new IntendenciaPaginador(b.build(),1);
+  IntendenciaClient client=origen==OrigenDatos.SUCIVE?new GeoPatClient(paginador):new GeoPagosClient(paginador);
+  for(int i=1;i<=2;i++)server.expect(request -> assertThat(request.getURI().getQuery()).doesNotContain("fecha_inicio"))
+    .andExpect(queryParam("fecha_corte","2026-11-11")).andExpect(queryParam("include_total","0")).andExpect(queryParam("page",String.valueOf(i)))
+    .andRespond(withSuccess("{\"data\":[{\"CM\":"+i+"}],\"meta\":{\"total\":null,\"current_page\":"+i+",\"per_page\":1,\"last_page\":null,\"from\":"+i+",\"to\":"+i+",\"has_more\":"+(i<2)+"}}",MediaType.APPLICATION_JSON));
+  assertThat(client.obtenerFacturasPendientes(null,LocalDate.of(2026,11,11)).getData()).hasSize(2);server.verify();
+ }
+
+ @ParameterizedTest @EnumSource(OrigenDatos.class)
  void recorreTodasLasPaginasConElMismoPeriodo(OrigenDatos origen){
   var b=RestClient.builder().baseUrl("https://test.invalid");var server=MockRestServiceServer.bindTo(b).build();var paginador=new IntendenciaPaginador(b.build(),1);
   IntendenciaClient client=origen==OrigenDatos.SUCIVE?new GeoPatClient(paginador):new GeoPagosClient(paginador);

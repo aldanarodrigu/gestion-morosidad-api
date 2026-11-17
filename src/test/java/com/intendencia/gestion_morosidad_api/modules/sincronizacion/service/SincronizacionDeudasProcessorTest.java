@@ -603,6 +603,19 @@ class SincronizacionDeudasProcessorTest {
         assertThat(d.getEstado()).isEqualTo(EstadoDeuda.EN_GESTION);
     }
 
+    @Test
+    void sinLimiteReactivaDeudaAnteriorAlPeriodo() {
+        Deuda d = deudaExistente(); d.setEnPeriodoGestion(false); d.setAnioPeriodo(2013);
+        when(deudaRepository.findAllConPadronPorOrigen(OrigenDatos.INTENDENCIA)).thenReturn(List.of(d));
+        when(padronRepository.findAllByOrigen(OrigenDatos.INTENDENCIA)).thenReturn(List.of(d.getPadron()));
+        when(configuracionSegmentoService.reglasVigentes()).thenReturn(new ReglasSegmentacion(List.of()));
+        var fila=new GeoPagosFacturaPendienteDto(123,4567,null,null,"COM",null,"Persona",null,null,null,null,null,"NO",null,new BigDecimal("80.00"),LocalDate.of(2010,1,1),LocalDate.of(2026,9,1),"2013, 2026");
+        processor.procesar(List.of(fila),List.of(),List.of(),LocalDate.of(2026,9,24),LocalDateTime.of(2026,9,24,12,0),OrigenDatos.INTENDENCIA,null);
+        assertThat(d.isEnPeriodoGestion()).isTrue(); assertThat(d.getAnioPeriodo()).isNull();
+        assertThat(d.getDeudaDesde()).isEqualTo(LocalDate.of(2010,1,1));
+        assertThat(d.getEstado()).isEqualTo(EstadoDeuda.EN_GESTION);
+    }
+
     @ParameterizedTest @ValueSource(strings={"2012-12-31","2026-09-24"})
     void rechazaRespuestaQueNoRespetaLosLimitesSinAplicarCambios(String fecha) {
         Deuda d=deudaExistente();

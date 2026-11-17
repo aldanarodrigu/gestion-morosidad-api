@@ -2,7 +2,6 @@ package com.intendencia.gestion_morosidad_api.modules.sincronizacion.controller;
 import com.intendencia.gestion_morosidad_api.modules.sincronizacion.service.*;
 import com.intendencia.gestion_morosidad_api.shared.enums.OrigenDatos;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotNull;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.http.ResponseEntity;
@@ -14,7 +13,7 @@ import org.springframework.web.bind.annotation.*;
 public class ConfiguracionSincronizacionController {
     private final PeriodoSincronizacionService periodo;
     private final SincronizacionManualService manual;
-    public record Configuracion(@NotNull Integer anioMinimo) {}
+    public record Configuracion(Integer anioMinimo) {}
     @GetMapping("/configuracion") public Configuracion obtener() { return new Configuracion(periodo.anioMinimo()); }
     @PutMapping("/configuracion") public Configuracion guardar(@Valid @RequestBody Configuracion config) {
         manual.guardar(config.anioMinimo()); return obtener();

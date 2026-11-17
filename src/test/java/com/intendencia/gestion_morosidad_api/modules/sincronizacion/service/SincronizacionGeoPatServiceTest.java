@@ -74,6 +74,18 @@ class SincronizacionGeoPatServiceTest {
         else assertThat(eventos).extracting(p->p.etapa()).containsExactly("PREPARANDO","DEUDAS","COBROS","CONTACTOS","GUARDANDO","FINALIZADA");
     }
 
+    @ParameterizedTest @EnumSource(OrigenDatos.class)
+    void sinLimiteNoInventaUnaFechaInicial(OrigenDatos origen) {
+        when(periodo.anioMinimo()).thenReturn(null);
+        var client = origen == OrigenDatos.SUCIVE ? geoPatClient : geoPagosClient;
+        when(client.obtenerFacturasPendientes(null,LocalDate.of(2026,10,16))).thenReturn(new IntendenciaApiResponse<>(List.of(),null));
+        when(deudaRepository.ultimaSincronizacionPorOrigen(origen)).thenReturn(Optional.empty());
+        when(client.obtenerFacturasCanceladas(any(),any())).thenReturn(new IntendenciaApiResponse<>(List.of(),null));
+        when(client.obtenerContribuyentes()).thenReturn(new IntendenciaApiResponse<>(List.of(),null));
+        service.sincronizar(origen);
+        verify(processor).procesar(any(),any(),any(),any(),any(),eq(origen),isNull());
+    }
+
     @Test void respuestaInvalidaNoEscribeYLiberaElBloqueo() {
         when(geoPatClient.obtenerFacturasPendientes(LocalDate.of(2013,1,1),LocalDate.of(2026,10,16))).thenReturn(null);
         for (int i=0; i<2; i++)

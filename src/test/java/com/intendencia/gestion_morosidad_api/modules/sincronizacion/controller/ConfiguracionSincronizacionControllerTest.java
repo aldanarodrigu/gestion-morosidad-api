@@ -34,9 +34,9 @@ class ConfiguracionSincronizacionControllerTest {
   mvc.perform(post("/api/sincronizaciones/ejecucion").param("origen","SUCIVE").with(user("a").roles("ADMINISTRADOR"))).andExpect(status().isAccepted());verify(manual).iniciar(OrigenDatos.SUCIVE);
   mvc.perform(get("/api/sincronizaciones/ejecucion").with(user("a").roles("ADMINISTRADOR"))).andExpect(status().isNoContent());
  }
- @Test void anioAusenteSeRechaza() throws Exception {
+ @Test void anioAusentePermiteSinLimite() throws Exception {
   mvc.perform(put("/api/sincronizaciones/configuracion").with(user("a").roles("ADMINISTRADOR")).contentType("application/json").content("{}"))
-   .andExpect(status().isBadRequest());verifyNoInteractions(manual);
+   .andExpect(status().isOk());verify(manual).guardar(null);
  }
  @Test void exponeAvanceValidadoSinInventarUnTotal() throws Exception {
   var p = new com.intendencia.gestion_morosidad_api.integration.intendencia.common.ProgresoSincronizacion("DEUDAS",55,56,55000,null,null,3,"Reintentando página 56");
