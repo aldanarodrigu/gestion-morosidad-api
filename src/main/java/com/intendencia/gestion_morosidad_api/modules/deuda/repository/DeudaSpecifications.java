@@ -60,7 +60,7 @@ public final class DeudaSpecifications {
                                 ESCAPE
                         ),
                         cb.like(
-                                contribuyente.get("documento"),
+                                cb.lower(contribuyente.get("documento")),
                                 contiene(texto),
                                 ESCAPE
                         ),

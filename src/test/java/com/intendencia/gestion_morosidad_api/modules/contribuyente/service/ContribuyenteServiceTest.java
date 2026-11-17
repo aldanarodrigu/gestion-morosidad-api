@@ -51,15 +51,17 @@ class ContribuyenteServiceTest {
     }
 
     @Test
-    void listadoDevuelveUnaPaginaConElCmDeCadaPadron() {
-        var pageable = PageRequest.of(0, 20);
+    void listadoMapeaUltimaPaginaConCmYMetadatosDelRepositorio() {
+        var pageable = PageRequest.of(2, 20);
         when(padronRepository.findAll(any(Specification.class), eq(pageable))).thenReturn(new PageImpl<>(
                 List.of(padron("123", "4567", "Ana Pérez", "1234567-8"), padron("124", "4568", "Luis Gómez", null)),
                 pageable, 42));
 
-        var respuesta = service.listarContribuyentes("ana", null, pageable);
+        var respuesta = service.listarContribuyentes(null, null, pageable);
 
         assertThat(respuesta.contenido()).extracting(r -> r.cm()).containsExactly("123", "124");
+        assertThat(respuesta.pagina()).isEqualTo(2);
+        assertThat(respuesta.tamanio()).isEqualTo(20);
         assertThat(respuesta.totalElementos()).isEqualTo(42);
         assertThat(respuesta.totalPaginas()).isEqualTo(3);
     }

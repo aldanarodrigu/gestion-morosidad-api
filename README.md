@@ -286,7 +286,7 @@ Ejemplo de cuerpo de registro:
 ```
 
 - Resultados: `EXITOSA`, `NO_LOCALIZADO`, `RECHAZADA`, `PENDIENTE`, `RESPONDIO`, `NO_RESPONDIO`, `PROXIMO_A_VENIR`.
-- Observación opcional, máximo 255 caracteres. Deuda y acción deben existir; no se admiten acciones inactivas.
+- Observación opcional, máximo 255 caracteres. Deuda y acción deben existir; no se admiten acciones inactivas. La acción debe estar vinculada al segmento de mora actual de la deuda; sin segmento o fuera del período de gestión se rechaza el registro.
 - Fecha y autor se obtienen del servidor y del usuario autenticado. El campo anterior `fecha` se acepta
   por compatibilidad, pero no modifica la fecha registrada. No se admite un autor elegido por el cliente.
 - Registrar no cambia automáticamente el estado de la deuda.
@@ -864,3 +864,20 @@ La cancelación y el comienzo de **Guardado** se coordinan atómicamente. Una ve
 En Configuracion > Sincronizacion se puede dejar el anio minimo vacio y guardar el periodo. El API acepta `{"anioMinimo":null}` (o el campo omitido) y persiste NULL, sin alterar el anio configurado al instalar la migracion `V202611161000__sincronizacion_sin_anio_minimo.sql`. Se aplica tanto a ejecuciones manuales como automaticas.
 
 Sin limite se omite `fecha_inicio`, se conserva `fecha_corte` y se envia `include_total=0` en todas las paginas y reintentos de pendientes. Las deudas antiguas recibidas vuelven a estar incluidas en cartera. La descarga completa conserva la conciliacion existente de cuentas ausentes y la proteccion contra respuestas vacias inesperadas. Guardar el periodo no inicia una sincronizacion ni modifica deudas.
+
+### Prueba de arranque aislada
+
+`GestionMorosidadApiApplicationTests` requiere `APP_TEST_DB_URL` hacia una base PostgreSQL local cuyo nombre empiece por `app_test_`. Sin esa variable, se omite: ejecutar `mvn test` no debe arrancar la aplicación contra la base del `.env`. La prueba carga las propiedades generales sin importar `.env`, usa credenciales de prueba explícitas, una clave JWT ficticia y deshabilita la sincronización automática. Comprueba el arranque, las migraciones y la inicialización del administrador en esa base desechable.
+
+```powershell
+$nombrePrueba = 'app_test_' + [guid]::NewGuid().ToString('N')
+docker exec morosidad-local createdb -U morosidad $nombrePrueba
+if ($LASTEXITCODE -ne 0) { throw 'No se pudo crear la base desechable' }
+try {
+    $env:APP_TEST_DB_URL = "jdbc:postgresql://localhost:5434/$nombrePrueba"
+    ./mvnw.cmd test '-Dtest=GestionMorosidadApiApplicationTests,ContribuyenteServiceTest,ContribuyenteConsultasControllerTest'
+} finally {
+    Remove-Item Env:APP_TEST_DB_URL -ErrorAction SilentlyContinue
+    docker exec morosidad-local dropdb -U morosidad --force $nombrePrueba
+}
+```

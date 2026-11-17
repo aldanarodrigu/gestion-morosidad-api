@@ -323,4 +323,102 @@ class CarteraAgrupadaPersistenciaTest {
         for (String ruta : new String[]{"/api/deudas", "/api/deudas/agrupadas"})
             mvc.perform(get(ruta).param("conContacto", "invalido")).andExpect(status().isBadRequest());
     }
+
+    @Test void documentosConCerosInicialesSonIdentidadesDistintas() throws Exception {
+        deuda(persona("Homónimo","00123"),"10.25",1,"2026-01-01");
+        deuda(persona("Homónimo","123"),"20.50",2,"2026-01-01");
+        deuda(persona("Otro nombre"," 00123 "),"5.25",3,"2025-01-01");
+        consultar(get("/api/deudas/agrupadas")).andExpect(jsonPath("$.totalElementos").value(2))
+                .andExpect(jsonPath("$.contenido[?(@.documento == '00123')].importeTotal",contains(15.5)))
+                .andExpect(jsonPath("$.contenido[?(@.documento == '123')].importeTotal",contains(20.5)));
+    }
+    @Test void mismoCmEnDistintosOrigenesNoMezclaIdentificadoresNiSaldos() throws Exception {
+        var c=persona("Persona dos orígenes","DOS-ORIGENES");
+        var municipal=deuda(c,"10.25",1,"2026-01-01");
+        var sucive=deuda(c,"20.50",3,"2025-01-01");
+        sucive.getPadron().setCm(municipal.getPadron().getCm());
+        sucive.getPadron().setOrigen(com.intendencia.gestion_morosidad_api.shared.enums.OrigenDatos.SUCIVE);
+        for(String ruta:new String[]{"/api/deudas","/api/deudas/agrupadas"}) {
+            consultar(get(ruta).param("origen","SUCIVE")).andExpect(jsonPath("$.totalElementos").value(1));
+            consultar(get(ruta).param("origen","INTENDENCIA")).andExpect(jsonPath("$.totalElementos").value(1));
+        }
+        consultar(get("/api/deudas/agrupadas")).andExpect(jsonPath("$.totalElementos").value(1))
+                .andExpect(jsonPath("$.contenido[0].importeTotal").value(30.75))
+                .andExpect(jsonPath("$.contenido[0].deudas[*].id",containsInAnyOrder(municipal.getId().intValue(),sucive.getId().intValue())));
+        consultar(get("/api/deudas/agrupadas").param("origen","SUCIVE"))
+                .andExpect(jsonPath("$.contenido[0].importeTotal").value(20.5))
+                .andExpect(jsonPath("$.contenido[0].deudas[0].id").value(sucive.getId()));
+    }
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings={"%","_","\\"})
+    void busquedaTrataComodinesComoTextoLiteral(String marca) throws Exception {
+        deuda(persona("Nombre "+marca+" literal","DOC-LITERAL"),"10",1,"2026-01-01");
+        deuda(persona("Nombre X diferente","DOC-OTRO"),"20",1,"2026-01-01");
+        for(String ruta:new String[]{"/api/deudas","/api/deudas/agrupadas"})
+            consultar(get(ruta).param("contribuyente",marca)).andExpect(jsonPath("$.totalElementos").value(1));
+    }
+    @Test void padTipoFiltraTodaLaCarteraAntesDePaginarLosGrupos() throws Exception {
+        var c=persona("Primera","PT-1");
+        deuda(c,"500",1,"2024-01-01").getPadron().setTipoPadron("CIR");
+        var a=deuda(c,"10",1,"2026-01-01");a.getPadron().setTipoPadron(" PAT ");
+        var b=deuda(c,"20",2,"2026-01-02");b.getPadron().setTipoPadron("PAT");
+        deuda(persona("Segunda","PT-2"),"25",3,"2025-01-01").getPadron().setTipoPadron("PAT");
+        consultar(get("/api/deudas/agrupadas").param("tipoPadron"," PAT ").param("size","1").param("sort","importe,desc"))
+                .andExpect(jsonPath("$.totalElementos").value(2)).andExpect(jsonPath("$.totalPaginas").value(2))
+                .andExpect(jsonPath("$.contenido[0].documento").value("PT-1"))
+                .andExpect(jsonPath("$.contenido[0].importeTotal").value(30))
+                .andExpect(jsonPath("$.contenido[0].deudas.length()").value(2));
+        consultar(get("/api/deudas/agrupadas").param("tipoPadron","PAT").param("size","1").param("sort","importe,desc").param("page","1"))
+                .andExpect(jsonPath("$.contenido[0].documento").value("PT-2"));
+        consultar(get("/api/deudas").param("tipoPadron","PAT").param("size","1"))
+                .andExpect(jsonPath("$.totalElementos").value(3)).andExpect(jsonPath("$.totalPaginas").value(3));
+    }
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings={"todos","origen","padTipo","contacto","sinContacto","combinados","sinResultados","estado"})
+    void agruparConservaExactamenteLasDeudasYLaSumaDelListadoFiltrado(String caso) throws Exception {
+        var a=persona("Persona A","INV-001");var b=persona("Persona B","INV-002");
+        deuda(a,"10.11",1,"2026-01-01").getPadron().setTipoPadron("CIU");
+        var sucive=deuda(a,"20.22",2,"2026-01-02");sucive.getPadron().setTipoPadron("PAT");
+        sucive.getPadron().setOrigen(com.intendencia.gestion_morosidad_api.shared.enums.OrigenDatos.SUCIVE);
+        deuda(b,"30.33",3,"2025-01-01").getPadron().setTipoPadron("CIU");
+        deuda(b,"999",1,"2024-01-01").setEnPeriodoGestion(false);
+        deuda(b,"888",1,"2024-01-01").setEstado(EstadoDeuda.CANCELADA);
+        contacto(a,com.intendencia.gestion_morosidad_api.modules.contacto.TipoContacto.EMAIL,"a@example.test",true);
+        contacto(a,com.intendencia.gestion_morosidad_api.modules.contacto.TipoContacto.TELEFONO,"099123456",true);
+        java.util.Map<String,String> filtros=switch(caso) {
+            case "origen" -> java.util.Map.of("origen","SUCIVE");
+            case "padTipo" -> java.util.Map.of("tipoPadron","CIU");
+            case "contacto" -> java.util.Map.of("conContacto","true");
+            case "sinContacto" -> java.util.Map.of("conContacto","false");
+            case "combinados" -> java.util.Map.of("conContacto","true","tipoPadron","PAT","origen","SUCIVE","contribuyente","INV-001");
+            case "sinResultados" -> java.util.Map.of("contribuyente","NO-EXISTE");
+            case "estado" -> java.util.Map.of("estado","CANCELADA");
+            default -> java.util.Map.of();
+        };
+        var individual=get("/api/deudas").param("size","100");var agrupada=get("/api/deudas/agrupadas").param("size","100");
+        filtros.forEach((k,v)->{individual.param(k,v);agrupada.param(k,v);});
+        String i=consultar(individual).andReturn().getResponse().getContentAsString();
+        String g=consultar(agrupada).andReturn().getResponse().getContentAsString();
+        java.util.List<Number> idsIndividuales=com.jayway.jsonpath.JsonPath.read(i,"$.contenido[*].id");
+        java.util.List<Number> idsAgrupados=com.jayway.jsonpath.JsonPath.read(g,"$.contenido[*].deudas[*].id");
+        org.assertj.core.api.Assertions.assertThat(idsAgrupados).containsExactlyInAnyOrderElementsOf(idsIndividuales).doesNotHaveDuplicates();
+        java.util.List<Number> importes=com.jayway.jsonpath.JsonPath.read(i,"$.contenido[*].importe");
+        java.util.List<Number> sumas=com.jayway.jsonpath.JsonPath.read(g,"$.contenido[*].importeTotal");
+        var total=importes.stream().map(n->new BigDecimal(n.toString())).reduce(BigDecimal.ZERO,BigDecimal::add);
+        var agrupado=sumas.stream().map(n->new BigDecimal(n.toString())).reduce(BigDecimal.ZERO,BigDecimal::add);
+        org.assertj.core.api.Assertions.assertThat(agrupado).isEqualByComparingTo(total);
+        org.assertj.core.api.Assertions.assertThat(idsIndividuales).hasSize(caso.equals("todos")?3:caso.equals("sinResultados")?0:caso.equals("padTipo")||caso.equals("contacto")?2:1);
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings={"AB12345","ab12345","Ab12345","  ab12345  "})
+    void buscaDocumentosAlfanumericosSinDependerDeMayusculas(String texto) throws Exception {
+        deuda(persona("Persona documento mixto","AB12345"),"12.34",1,"2026-01-01");
+        deuda(persona("Otra persona","CD12345"),"99",2,"2026-01-01");
+        for(String ruta:new String[]{"/api/deudas","/api/deudas/agrupadas"})
+            consultar(get(ruta).param("contribuyente",texto)).andExpect(jsonPath("$.totalElementos").value(1));
+        consultar(get("/api/deudas/agrupadas").param("contribuyente",texto))
+                .andExpect(jsonPath("$.contenido[0].documento").value("AB12345"))
+                .andExpect(jsonPath("$.contenido[0].importeTotal").value(12.34));
+    }
 }

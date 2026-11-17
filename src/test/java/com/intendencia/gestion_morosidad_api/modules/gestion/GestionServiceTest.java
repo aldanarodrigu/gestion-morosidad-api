@@ -41,6 +41,8 @@ class GestionServiceTest {
         return new GestionRequest(LocalDateTime.of(2000, 1, 1, 0, 0), ResultadoGestion.EXITOSA, "Se contactó", 10L, 2L);
     }
     void referencias() {
+        var mora=new com.intendencia.gestion_morosidad_api.modules.segmento.entity.SegmentoMora();mora.setId(1L);deuda.setSegmentoMora(mora);
+        lenient().when(segmentos.existsByAccion_IdAndSegmentoMora_Id(2L,1L)).thenReturn(true);
         when(deudas.findById(10L)).thenReturn(Optional.of(deuda));
         when(acciones.findById(2L)).thenReturn(Optional.of(accion));
     }
@@ -96,7 +98,7 @@ class GestionServiceTest {
         assertThatThrownBy(() -> service.createGestion(request(), "notificador")).isInstanceOf(ReglaNegocioException.class);
         verifyNoInteractions(gestiones);
     }
-    @Test void noGuardaConUsuarioInexistenteOInactivo() {
+    @Test void noGuardaConUsuarioInactivo() {
         referencias(); usuario.setActivo(false);
         when(usuarios.findByUsername("notificador")).thenReturn(Optional.of(usuario));
         assertThatThrownBy(() -> service.createGestion(request(), "notificador")).isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
@@ -105,5 +107,29 @@ class GestionServiceTest {
     @Test void deudaSinSegmentoNoTieneAccionesDisponibles() {
         when(deudas.findById(10L)).thenReturn(Optional.of(deuda));
         assertThat(service.getAccionesDisponibles(10L)).isEmpty(); verifyNoInteractions(segmentos);
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(strings={"otroSegmento","sinSegmento","fueraPeriodo"})
+    void noRegistraFueraDelContextoPermitido(String caso) {
+        referencias();when(usuarios.findByUsername("notificador")).thenReturn(Optional.of(usuario));
+        if(caso.equals("otroSegmento")) when(segmentos.existsByAccion_IdAndSegmentoMora_Id(2L,1L)).thenReturn(false);
+        if(caso.equals("sinSegmento")) deuda.setSegmentoMora(null);
+        if(caso.equals("fueraPeriodo")) deuda.setEnPeriodoGestion(false);
+        assertThatThrownBy(()->service.createGestion(request(),"notificador")).isInstanceOf(ReglaNegocioException.class);
+        verifyNoInteractions(gestiones);verify(deudas,never()).save(any());
+    }
+    @Test void usuarioDesconocidoNoProduceGestion() {
+        referencias();when(usuarios.findByUsername("desconocido")).thenReturn(Optional.empty());
+        assertThatThrownBy(()->service.createGestion(request(),"desconocido")).isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
+        verifyNoInteractions(gestiones);
+    }
+    @Test void accionesDisponiblesIncluyenSoloLasActivasDelSegmentoActual() {
+        var mora=new com.intendencia.gestion_morosidad_api.modules.segmento.entity.SegmentoMora();mora.setId(1L);deuda.setSegmentoMora(mora);
+        when(deudas.findById(10L)).thenReturn(Optional.of(deuda));
+        Accion inactiva=new Accion();inactiva.setId(99L);inactiva.setActivo(false);
+        var a=new AccionSegmento();a.setAccion(accion);var b=new AccionSegmento();b.setAccion(inactiva);
+        when(segmentos.findBySegmentoMora_Id(1L)).thenReturn(List.of(a,b));
+        assertThat(service.getAccionesDisponibles(10L)).extracting(r->r.id()).containsExactly(2L);
     }
 }

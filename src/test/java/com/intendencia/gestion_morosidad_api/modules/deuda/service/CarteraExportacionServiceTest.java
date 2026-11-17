@@ -76,23 +76,64 @@ class CarteraExportacionServiceTest {
         verify(deudas, times(2)).listar(eq(filtro), any());
     }
 
+    private DeudasAgrupadasResponse grupo(int numero) {
+        String documento = "001" + String.format(java.util.Locale.ROOT, "%04d", numero);
+        var persona = new ContribuyenteResponse("CM-" + numero, "Persona " + numero, documento, OrigenDatos.SUCIVE);
+        var filas = IntStream.rangeClosed(1, 2).mapToObj(i -> {
+            long id = numero * 2L + i;
+            return deuda(id).toBuilder().contribuyenteId(numero + 1L).contribuyente(persona)
+                    .padron(new PadronResponse("CM-" + id, "PAD-" + id, "CIU", null, null, null,
+                            persona, OrigenDatos.SUCIVE, "MAT-" + id)).build();
+        }).toList();
+        return new DeudasAgrupadasResponse("DOC:" + documento, documento, List.of(persona.nombre()),
+                new BigDecimal("2469.12"), 400L, tardia, filas);
+    }
+
     @Test
     void agrupadaExportaTodasLasPaginasDePersonasYSusDeudasCompletas() throws Exception {
-        var g = new DeudasAgrupadasResponse("DOC:00123456", "00123456", List.of("Persona"),
-                new BigDecimal("2469.12"), 400L, tardia, List.of(deuda(1), deuda(2)));
-        when(grupos.listar(filtro, PageRequest.of(0, 500, orden))).thenReturn(new PaginaResponse<>(List.of(g), 0, 500, 501, 2));
-        when(grupos.listar(filtro, PageRequest.of(1, 500, orden))).thenReturn(new PaginaResponse<>(List.of(g), 1, 500, 501, 2));
+        var primeraPagina = IntStream.range(0, 500).mapToObj(this::grupo).toList();
+        var ultima = grupo(500);
+        when(grupos.listar(filtro, PageRequest.of(0, 500, orden)))
+                .thenReturn(new PaginaResponse<>(primeraPagina, 0, 500, 501, 2));
+        when(grupos.listar(filtro, PageRequest.of(1, 500, orden)))
+                .thenReturn(new PaginaResponse<>(List.of(ultima), 1, 500, 501, 2));
         try (var libro = WorkbookFactory.create(new ByteArrayInputStream(servicio.exportar(filtro, orden, true)))) {
             assertEquals(2, libro.getNumberOfSheets());
             var resumen = libro.getSheet("Contribuyentes");
-            assertEquals(2, resumen.getLastRowNum());
-            assertEquals("00123456", resumen.getRow(1).getCell(0).getStringCellValue());
-            assertEquals(2, resumen.getRow(1).getCell(2).getNumericCellValue());
-            assertEquals("Mora Tardía", resumen.getRow(1).getCell(3).getStringCellValue());
-            assertEquals(2469.12, resumen.getRow(1).getCell(5).getNumericCellValue(), 0.001);
-            assertEquals(4, libro.getSheet("Cartera").getLastRowNum());
+            var detalle = libro.getSheet("Cartera");
+            assertEquals(501, resumen.getLastRowNum());
+            assertEquals(1002, detalle.getLastRowNum());
+            var documentos = new java.util.HashSet<String>();
+            var cuentas = new java.util.HashSet<String>();
+            var importesPorDocumento = new java.util.HashMap<String, BigDecimal>();
+            var filasPorDocumento = new java.util.HashMap<String, Integer>();
+            for (int i = 1; i <= detalle.getLastRowNum(); i++) {
+                var fila = detalle.getRow(i);
+                assertTrue(cuentas.add(fila.getCell(0).getStringCellValue()), "CM repetido en el detalle");
+                String doc = fila.getCell(3).getStringCellValue();
+                importesPorDocumento.merge(doc, BigDecimal.valueOf(fila.getCell(9).getNumericCellValue()), BigDecimal::add);
+                filasPorDocumento.merge(doc, 1, Integer::sum);
+            }
+            for (int i = 1; i <= resumen.getLastRowNum(); i++) {
+                var fila = resumen.getRow(i);
+                var esperado = grupo(i - 1);
+                String doc = fila.getCell(0).getStringCellValue();
+                assertEquals(esperado.documento(), doc);
+                assertTrue(documentos.add(doc), "Documento repetido en el resumen");
+                assertEquals(2, fila.getCell(2).getNumericCellValue());
+                assertEquals(Integer.valueOf(2), filasPorDocumento.get(doc));
+                assertEquals("Mora Tardía", fila.getCell(3).getStringCellValue());
+                assertEquals(0, esperado.importeTotal().compareTo(BigDecimal.valueOf(fila.getCell(5).getNumericCellValue())));
+                assertEquals(0, esperado.importeTotal().compareTo(importesPorDocumento.get(doc)));
+            }
+            assertEquals(documentos, importesPorDocumento.keySet());
+            assertEquals(ultima.documento(), resumen.getRow(501).getCell(0).getStringCellValue());
+            assertEquals("CM-1002", detalle.getRow(1002).getCell(0).getStringCellValue());
         }
         verifyNoInteractions(deudas);
+        verify(grupos).listar(filtro, PageRequest.of(0, 500, orden));
+        verify(grupos).listar(filtro, PageRequest.of(1, 500, orden));
+        verifyNoMoreInteractions(grupos);
     }
 
     @Test

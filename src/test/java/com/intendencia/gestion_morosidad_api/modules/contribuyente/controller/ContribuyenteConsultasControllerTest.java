@@ -1,5 +1,9 @@
 package com.intendencia.gestion_morosidad_api.modules.contribuyente.controller;
 
+import com.intendencia.gestion_morosidad_api.config.SecurityConfig;
+import org.springframework.context.annotation.Import;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -27,8 +31,11 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 @WebMvcTest(ContribuyenteController.class)
-@WithMockUser
+@Import(SecurityConfig.class)
+@WithMockUser(roles = "ANALISTA")
 class ContribuyenteConsultasControllerTest {
+    @MockitoBean JwtDecoder decoder;
+    @MockitoBean JwtAuthenticationConverter converter;
     @MockitoBean private com.intendencia.gestion_morosidad_api.modules.deuda.service.DeudaService deudaService;
 
 
@@ -79,13 +86,19 @@ class ContribuyenteConsultasControllerTest {
         when(contribuyenteService.listarPadronesPorCm("123"))
                 .thenReturn(Optional.of(List.of(
                         new PadronResponse("123", "4567", "COM", null, null, null, contribuyente),
-                        new PadronResponse("124", "4568", "COM", null, null, null, contribuyente))));
+                        new PadronResponse("124", "4568", "COM", null, null, null,
+                                new ContribuyenteResponse("124", "Ana Pérez", "1234567-8")))));
 
         mockMvc.perform(get("/api/contribuyentes/123/padrones"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].numeroPadron").value("4567"))
                 .andExpect(jsonPath("$[1].numeroPadron").value("4568"))
-                .andExpect(jsonPath("$[0].contribuyente.nombre").value("Ana Pérez"));
+                .andExpect(jsonPath("$[0].contribuyente.nombre").value("Ana Pérez"))
+                .andExpect(jsonPath("$[0].cm").value("123"))
+                .andExpect(jsonPath("$[0].contribuyente.cm").value("123"))
+                .andExpect(jsonPath("$[1].cm").value("124"))
+                .andExpect(jsonPath("$[1].contribuyente.cm").value("124"))
+                .andExpect(jsonPath("$[1].contribuyente.documento").value("1234567-8"));
 
         verify(contribuyenteService).listarPadronesPorCm("123");
     }
