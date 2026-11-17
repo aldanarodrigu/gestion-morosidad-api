@@ -42,3 +42,23 @@ try {
 Faltaban en el código fuente `V202610121940__acciones_alcance_inicial.sql` y `V202610130020__descripcion_acciones.sql`, pero seguían presentes en los recursos compilados y figuraban aplicadas en la base local. Se restauraron sus bytes originales desde esos recursos, comprobando que sus checksums Flyway coinciden con los registrados: 2128438556 y 486776609, respectivamente.
 
 La consulta de las 31 entradas aplicadas del historial local fue de solo lectura: después de la restauración no quedan archivos faltantes ni checksums distintos. No se ejecutó `repair`, no se reescribió el historial y no se aplicaron migraciones sobre la base de trabajo.
+
+
+## Copia anonimizada de la base de trabajo actual
+
+Ejecutar desde la raíz del backend, con Docker `morosidad-local` disponible y Maven instalado:
+
+```powershell
+python scripts/test_copia_actual.py
+```
+
+El script crea tres bases con nombres aleatorios: una copia para Flyway, una vacía para Actuator prod y otra para las pruebas históricas de Flyway. Lee `morosidad` mediante `pg_dump` consistente y transmite el dump directamente a `pg_restore`, sin guardar un archivo con los registros originales. La copia no se conecta a la aplicación ni se publica. Sustituye nombres, documentos, CM, números de padrón, matrículas, localidades, contactos, usuarios, contraseñas, observaciones y otros textos libres; conserva IDs, relaciones, importes y roles. Los pseudónimos mantienen las equivalencias dentro de esa ejecución. Las contraseñas quedan inutilizables. Solo después ejecuta Maven. Al finalizar elimina exclusivamente las bases que creó, también si falla una prueba.
+
+`FlywayCopiaActualTest` comprueba:
+
+1. Validación de todos los checksums del historial real, cero migraciones pendientes y cero migraciones reaplicadas; compara cantidad y huella de filas de **todas** las tablas antes/después, incluido el historial, y comprueba roles sin usuarios huérfanos.
+2. Reconstrucción del esquema anterior a roles múltiples en un esquema aislado, cargando los usuarios anonimizados de la copia. Conserva ID, nombre de prueba, contraseña inutilizada, estado y rol al aplicar las migraciones restantes; después verifica que un usuario admita los tres roles.
+
+**Alcance:** la base actual ya usa roles múltiples. Para probar la transición se reconstruye el esquema antiguo y se proyecta un rol por usuario (primero en orden alfabético cuando hoy tiene varios). Esto prueba la migración con usuarios procedentes de la copia actual; no sustituye una restauración de un respaldo histórico anterior a esa migración. Las pruebas sintéticas existentes también cubren los tres roles antiguos, rollback y reintento.
+
+El script requiere el contenedor, puerto local 5434, usuario/clave de prueba y ruta de Maven utilizados por el entorno local; no toma credenciales de `.env`. No apunta al servidor de producción ni realiza sincronizaciones externas. Su log contiene únicamente fixtures y datos ya anonimizados.
