@@ -86,13 +86,19 @@ class ContribuyenteConsultasControllerTest {
         when(contribuyenteService.listarPadronesPorCm("123"))
                 .thenReturn(Optional.of(List.of(
                         new PadronResponse("123", "4567", "COM", null, null, null, contribuyente),
-                        new PadronResponse("124", "4568", "COM", null, null, null, contribuyente))));
+                        new PadronResponse("124", "4568", "COM", null, null, null,
+                                new ContribuyenteResponse("124", "Ana Pérez", "1234567-8")))));
 
         mockMvc.perform(get("/api/contribuyentes/123/padrones"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].numeroPadron").value("4567"))
                 .andExpect(jsonPath("$[1].numeroPadron").value("4568"))
-                .andExpect(jsonPath("$[0].contribuyente.nombre").value("Ana Pérez"));
+                .andExpect(jsonPath("$[0].contribuyente.nombre").value("Ana Pérez"))
+                .andExpect(jsonPath("$[0].cm").value("123"))
+                .andExpect(jsonPath("$[0].contribuyente.cm").value("123"))
+                .andExpect(jsonPath("$[1].cm").value("124"))
+                .andExpect(jsonPath("$[1].contribuyente.cm").value("124"))
+                .andExpect(jsonPath("$[1].contribuyente.documento").value("1234567-8"));
 
         verify(contribuyenteService).listarPadronesPorCm("123");
     }
