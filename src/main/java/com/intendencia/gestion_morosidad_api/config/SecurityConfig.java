@@ -10,8 +10,12 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
+import org.springframework.security.oauth2.server.resource.web.BearerTokenResolver;
+import org.springframework.security.oauth2.server.resource.web.DefaultBearerTokenResolver;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
 
 @Configuration
 @EnableWebSecurity
@@ -29,8 +33,17 @@ public class SecurityConfig {
                         .requestMatchers("/actuator/health").permitAll()
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(oauth2 -> oauth2
+                        .bearerTokenResolver(bearerTokenResolver())
                         .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter)));
         return http.build();
+    }
+
+    // El login ignora el header Authorization: un token vencido que quedó en el navegador
+    // no debe impedir iniciar sesión de nuevo.
+    private BearerTokenResolver bearerTokenResolver() {
+        var login = PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/api/auth/login");
+        var porDefecto = new DefaultBearerTokenResolver();
+        return request -> login.matches(request) ? null : porDefecto.resolve(request);
     }
 
     @Bean

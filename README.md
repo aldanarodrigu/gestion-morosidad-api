@@ -17,6 +17,7 @@ valores reales a `.env.example`.
 | `DB_POOL_SIZE` | No | Conexiones por instancia (por defecto 3, ver [Supabase](#base-en-supabase)) |
 | `UTEC_API_USERNAME`, `UTEC_API_PASSWORD` | Para sincronizar | Credenciales de GeoPagos (las entrega la Intendencia) |
 | `JWT_SECRET` | Sí | Clave para firmar los tokens. **En Base64 y de al menos 32 bytes**; sin ella la API no arranca |
+| `JWT_EXPIRATION_SECONDS` | No | Duración del token en segundos (por defecto 3600 = 1 hora). Al vencer, el frontend vuelve al login |
 | `SINCRONIZACION_AUTOMATICA`, `SINCRONIZACION_CRON` | No | Sincronización diaria (ver más abajo) |
 | `DB_HOST_PORT`, `API_HOST_PORT`, `FRONT_HOST_PORT` | No | Puertos del `docker-compose` |
 
@@ -452,7 +453,13 @@ Los roles suman permisos. Administrador tiene acceso de consulta a todas las sec
 - ADMINISTRADOR + ANALISTA: suma administracion y consulta/edicion de contactos; no registra gestiones.
 
 Las restricciones se aplican en los controladores del backend y en la navegacion del frontend.
-`PermisosRolesTest` comprueba los tres roles y sus combinaciones con Spring Security.
+`MatrizPermisosTest` recorre todos los endpoints con las 7 combinaciones de roles y sin sesión, y
+falla si se agrega un endpoint sin declarar quién puede usarlo: al cambiar permisos, actualizar su
+tabla `MATRIZ`. `PermisosRolesTest` cubre casos puntuales (por ejemplo, que el servicio de gestiones
+no se invoque si se rechaza el acceso) y `AutenticacionJwtTest` valida los tokens: vencidos, con otra
+firma, alterados o sin firma, y revocación de roles o desactivación con un token ya emitido.
+`POST /api/auth/login` ignora el header `Authorization`, para que un token vencido guardado en el
+navegador no impida volver a iniciar sesión.
 Este ajuste no requiere migracion de base de datos.
 
 ## Crear acciones con segmento de mora
