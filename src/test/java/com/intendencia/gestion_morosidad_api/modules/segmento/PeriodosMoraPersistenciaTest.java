@@ -192,4 +192,41 @@ class PeriodosMoraPersistenciaTest {
         mvc.perform(get("/api/configuraciones-segmento/tipos-padron").with(user("analista").roles("ANALISTA")))
                 .andExpect(status().isOk()).andExpect(jsonPath("$", org.hamcrest.Matchers.contains("CIR", "CIU")));
     }
+
+    @Test void cambiarBaseRespetaRangosPropiosYReclasificaTiposQueHeredan() throws Exception {
+        Long propia=deuda(110,EstadoDeuda.PENDIENTE,"CIU");
+        Long heredada=deuda(111,EstadoDeuda.EN_CONVENIO,"CIR");
+        guardarPadTipo("CIU",10,20);
+        mvc.perform(put("/api/configuraciones-segmento").with(user("admin").roles("ADMINISTRADOR"))
+                .contentType(MediaType.APPLICATION_JSON).content(cuerpo(120,450))).andExpect(status().isOk());
+        em.flush();em.clear();var s=segmentos.findAllByOrderByOrdenAsc();
+        assertThat(deudas.findById(propia).orElseThrow().getSegmentoMora().getId()).isEqualTo(s.get(2).getId());
+        var d=deudas.findById(heredada).orElseThrow();
+        assertThat(d.getSegmentoMora().getId()).isEqualTo(s.get(0).getId());
+        assertThat(d.getEstado()).isEqualTo(EstadoDeuda.EN_CONVENIO);
+        mvc.perform(delete("/api/configuraciones-segmento/tipo-padron/CIU").with(user("admin").roles("ADMINISTRADOR")))
+                .andExpect(status().isNoContent());
+        em.flush();em.clear();
+        assertThat(deudas.findById(propia).orElseThrow().getSegmentoMora().getId()).isEqualTo(s.get(0).getId());
+    }
+    @Test void cambiosSucesivosConservanTodoElHistorialYUnaSolaVersionActiva() throws Exception {
+        deuda(110,EstadoDeuda.PENDIENTE,"CIU");
+        guardarPadTipo("CIU",10,20);guardarPadTipo("CIU",120,450);
+        em.flush();em.clear();
+        var historial=rangos.findAllByOrderByFechaCreacionDesc().stream().filter(c->"CIU".equals(c.getTipoPadron())).toList();
+        assertThat(historial).hasSize(6);
+        assertThat(historial.stream().filter(c->c.isActiva()).toList()).hasSize(3)
+                .extracting(c->c.getDiasDesde()).containsExactlyInAnyOrder(0,121,451);
+        assertThat(historial.stream().filter(c->!c.isActiva()).toList()).hasSize(3);
+    }
+    @Test void recalculoNoIncluyeDeudasFueraDelPeriodoYNoInventaSegmentoSinFecha() throws Exception {
+        Long fuera=deuda(110,EstadoDeuda.PENDIENTE,"CIU");
+        Long sinFecha=deuda(111,EstadoDeuda.EN_GESTION,"CIU");
+        var excluida=deudas.findById(fuera).orElseThrow();excluida.setEnPeriodoGestion(false);excluida.setSegmentoMora(null);
+        deudas.findById(sinFecha).orElseThrow().setDeudaDesde(null);deudas.flush();
+        guardarPadTipo("CIU",10,20);em.flush();em.clear();
+        assertThat(deudas.findById(fuera).orElseThrow().getSegmentoMora()).isNull();
+        var d=deudas.findById(sinFecha).orElseThrow();assertThat(d.getSegmentoMora()).isNull();
+        assertThat(d.getEstado()).isEqualTo(EstadoDeuda.EN_GESTION);
+    }
 }
