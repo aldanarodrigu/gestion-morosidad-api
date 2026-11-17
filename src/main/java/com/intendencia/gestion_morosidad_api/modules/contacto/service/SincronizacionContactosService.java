@@ -40,6 +40,10 @@ public class SincronizacionContactosService {
 
         Map<Clave, Dato> ultimos = new LinkedHashMap<>();
         for (Dato dato : datos) {
+            // Un valor vacío (p. ej. otro padrón de la misma persona sin teléfono) no descarta uno informado.
+            if (dato.valor() == null || dato.valor().isBlank()) {
+                continue;
+            }
             ultimos.put(new Clave(dato.contribuyente().getId(), dato.tipo(), dato.origen()), dato);
         }
         List<Contribuyente> contribuyentes = datos.stream().map(Dato::contribuyente).distinct().toList();

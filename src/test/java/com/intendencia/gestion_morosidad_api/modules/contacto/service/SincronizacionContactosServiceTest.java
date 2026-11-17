@@ -132,6 +132,21 @@ class SincronizacionContactosServiceTest {
     }
 
     @Test
+    void padronSinValorNoDescartaElValorDeOtroPadronDelMismoContribuyente() {
+        when(contactoRepository.findByContribuyenteIn(List.of(contribuyente))).thenReturn(List.of());
+
+        service.sincronizar(List.of(
+                dato(TipoContacto.TELEFONO, SincronizacionContactosService.PENDIENTES, "099123456", true),
+                dato(TipoContacto.TELEFONO, SincronizacionContactosService.PENDIENTES, null, true),
+                dato(TipoContacto.TELEFONO, SincronizacionContactosService.PENDIENTES, "  ", true)));
+
+        ArgumentCaptor<Iterable<Contacto>> captor = captor();
+        verify(contactoRepository).saveAll(captor.capture());
+        assertThat(toList(captor.getValue())).singleElement()
+                .extracting(Contacto::getValor).isEqualTo("099123456");
+    }
+
+    @Test
     void conservaTodosLosContactosExistentesInclusoSiCompartenTipoYFuente() {
         Contacto primero = contacto(TipoContacto.EMAIL, SincronizacionContactosService.PERSONAS,
                 "ana@example.test", true);
