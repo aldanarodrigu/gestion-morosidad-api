@@ -111,7 +111,8 @@ memoria y lo guarda en **una sola transacción** (si algo falla no queda nada a 
 ### Cómo ejecutarla
 
 Manual, con un usuario Administrador (por defecto `admin` / `admin123`, cambiarla antes de usar
-datos reales):
+datos reales). Ese usuario se crea solo al arrancar con la tabla de usuarios vacía; si después se
+renombra o se cambia su contraseña, no se vuelve a crear:
 
 ```powershell
 $api = "http://127.0.0.1:9080" # Docker; si se ejecuta Java directamente, usar su puerto configurado.

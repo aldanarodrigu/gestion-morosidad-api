@@ -18,7 +18,8 @@ public class DataInitializer {
     ) {
         return args -> {
 
-            if (!usuarioRepository.existsByUsername("admin")) {
+            // Solo en una base sin usuarios: si el admin se renombra, no se recrea con la contraseña por defecto.
+            if (usuarioRepository.count() == 0) {
 
                 Usuario admin = new Usuario();
 
