@@ -111,7 +111,8 @@ memoria y lo guarda en **una sola transacción** (si algo falla no queda nada a 
 ### Cómo ejecutarla
 
 Manual, con un usuario Administrador (por defecto `admin` / `admin123`, cambiarla antes de usar
-datos reales):
+datos reales). Ese usuario se crea solo al arrancar con la tabla de usuarios vacía; si después se
+renombra o se cambia su contraseña, no se vuelve a crear:
 
 ```powershell
 $api = "http://127.0.0.1:9080" # Docker; si se ejecuta Java directamente, usar su puerto configurado.
@@ -253,6 +254,31 @@ Las tablas las crea Flyway desde `src/main/resources/db/migration` (Hibernate so
 Nombrar las migraciones nuevas con fecha y hora, `VAAAAMMDDHHMM__descripcion.sql`, para no chocar
 con las de otros integrantes. Nunca modificar una migración que ya se aplicó en una base compartida:
 crear una nueva.
+
+PostgreSQL no indexa las claves foráneas: al agregar una FK que se use en filtros o joins, crear
+también su índice. `V202611171919__indices_claves_foraneas.sql` agrega los de
+`contactos.contribuyente_id`, `padrones.contribuyente_id` y `gestiones.accion_id`; sin el primero,
+la cartera filtrada "con contacto" y por localidad tardaba unos 20 s por página.
+
+## Rendimiento
+
+`RendimientoPersistenciaTest` genera datos sintéticos con el volumen real de GeoPagos (22.600 deudas,
+71.800 contribuyentes) y mide, con el pool de producción (3 conexiones), la sincronización (primera
+carga, diaria y sin cambios) y las consultas paginadas principales (p50, p95 y máximo de 10
+repeticiones). Falla si una sincronización supera 2 minutos, una página de cartera 1 s (p95), el
+reporte 5 s o la exportación a Excel 15 s, y escribe el informe en `target/rendimiento/informe.md`.
+No mide la descarga desde GeoPagos, que depende de la red: esa se toma del resumen de la
+sincronización en QA. Necesita una base vacía en cada corrida (tarda unos 3 minutos):
+
+```bash
+docker exec morosidad-local dropdb -U morosidad --if-exists rendimiento_test
+docker exec morosidad-local createdb -U morosidad rendimiento_test
+RENDIMIENTO_TEST_DB_URL=jdbc:postgresql://localhost:5434/rendimiento_test \
+  ./mvnw test -Dtest=RendimientoPersistenciaTest
+```
+
+Medido el 17/11/2026: primera carga 10,7 s, sincronización diaria 6 s, páginas de cartera entre
+5 y 400 ms (p95), reporte 0,3 s y exportación a Excel 6,5 s.
 
 ## Windows: "bind: An attempt was made to access a socket in a way forbidden"
 
