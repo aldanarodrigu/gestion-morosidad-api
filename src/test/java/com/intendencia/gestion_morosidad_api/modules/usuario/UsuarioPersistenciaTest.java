@@ -40,6 +40,8 @@ class UsuarioPersistenciaTest {
     @Autowired TokenService tokens;
     @Autowired JwtDecoder decoder;
     @Autowired jakarta.persistence.EntityManager entityManager;
+    @Autowired UsuarioService servicio;
+    @Autowired org.springframework.jdbc.core.JdbcTemplate jdbc;
 
     Usuario crear(String nombre, Rol... roles) {
         Usuario u = new Usuario(); u.setUsername(nombre); u.setPassword(encoder.encode("prueba123"));
@@ -193,5 +195,123 @@ class UsuarioPersistenciaTest {
                         .content("{\"username\":\"duplicado-test\",\"password\":\"prueba123\",\"roles\":[\"ANALISTA\"]}"))
                 .andExpect(status().isConflict());
         mvc.perform(get("/api/usuarios")).andExpect(status().isUnauthorized());
+    }
+
+    @Test void inexistenteDevuelve404AlConsultarYEditar() throws Exception {
+        mvc.perform(get("/api/usuarios/99999999").with(user("admin-test").roles("ADMINISTRADOR")))
+                .andExpect(status().isNotFound()).andExpect(jsonPath("$.status").value(404));
+        mvc.perform(put("/api/usuarios/99999999").with(user("admin-test").roles("ADMINISTRADOR"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\":\"fantasma\",\"roles\":[\"ANALISTA\"],\"activo\":true}"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test void renombrarAUnUsuarioExistenteDevuelve409YConservarElPropioNombreNo() throws Exception {
+        crear("ocupado-test", Rol.ANALISTA);
+        Usuario propio = crear("propio-test", Rol.ANALISTA);
+
+        mvc.perform(put("/api/usuarios/" + propio.getId()).with(user("admin-test").roles("ADMINISTRADOR"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\":\" ocupado-test \",\"roles\":[\"ANALISTA\"],\"activo\":true}"))
+                .andExpect(status().isConflict());
+        mvc.perform(put("/api/usuarios/" + propio.getId()).with(user("admin-test").roles("ADMINISTRADOR"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\":\"propio-test\",\"roles\":[\"NOTIFICADOR\"],\"activo\":true}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.roles[0]").value("NOTIFICADOR"));
+    }
+
+    @Test void rechazaCamposInvalidosSinCrearNiModificar() throws Exception {
+        for (String contenido : new String[]{"{}",
+                "{\"username\":\" \",\"password\":\"prueba123\",\"roles\":[\"ANALISTA\"]}",
+                "{\"username\":\"" + "a".repeat(256) + "\",\"password\":\"prueba123\",\"roles\":[\"ANALISTA\"]}",
+                "{\"username\":\"corta-test\",\"password\":\"1234567\",\"roles\":[\"ANALISTA\"]}",
+                "{\"username\":\"larga-test\",\"password\":\"" + "a".repeat(73) + "\",\"roles\":[\"ANALISTA\"]}"}) {
+            mvc.perform(post("/api/usuarios").with(user("admin-test").roles("ADMINISTRADOR"))
+                            .contentType(MediaType.APPLICATION_JSON).content(contenido))
+                    .andExpect(status().isBadRequest()).andExpect(jsonPath("$.errores").isMap());
+        }
+        assertThat(usuarios.existsByUsername("corta-test")).isFalse();
+        assertThat(usuarios.existsByUsername("larga-test")).isFalse();
+
+        Usuario existente = crear("editar-test", Rol.ANALISTA);
+        for (String contenido : new String[]{"{\"username\":\"editar-test\",\"roles\":[],\"activo\":true}",
+                "{\"username\":\"editar-test\",\"roles\":[\"ANALISTA\"]}"}) {
+            mvc.perform(put("/api/usuarios/" + existente.getId()).with(user("admin-test").roles("ADMINISTRADOR"))
+                            .contentType(MediaType.APPLICATION_JSON).content(contenido))
+                    .andExpect(status().isBadRequest());
+        }
+        entityManager.clear();
+        assertThat(usuarios.findById(existente.getId()).orElseThrow().getRoles()).containsExactly(Rol.ANALISTA);
+    }
+
+    String edicion(String username, String roles, boolean activo) {
+        return "{\"username\":\"" + username + "\",\"roles\":" + roles + ",\"activo\":" + activo + "}";
+    }
+
+    @Test void administradorNoSeQuitaSuRolNiSeDesactiva() throws Exception {
+        Usuario yo = crear("yo-admin-test", Rol.ADMINISTRADOR, Rol.NOTIFICADOR);
+        for (String contenido : new String[]{edicion("yo-admin-test", "[\"NOTIFICADOR\"]", true),
+                edicion("yo-admin-test", "[\"ADMINISTRADOR\",\"NOTIFICADOR\"]", false)}) {
+            mvc.perform(put("/api/usuarios/" + yo.getId()).with(user("yo-admin-test").roles("ADMINISTRADOR"))
+                            .contentType(MediaType.APPLICATION_JSON).content(contenido))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.mensaje").value("No podés quitarte el rol de administrador ni desactivar tu propia cuenta."));
+        }
+        entityManager.flush(); entityManager.clear();
+        Usuario guardado = usuarios.findById(yo.getId()).orElseThrow();
+        assertThat(guardado.getRoles()).contains(Rol.ADMINISTRADOR);
+        assertThat(guardado.getActivo()).isTrue();
+    }
+
+    @Test void administradorEditaSuPropiaCuentaSinPerderElRol() throws Exception {
+        Usuario yo = crear("yo-edito-test", Rol.ADMINISTRADOR);
+        mvc.perform(put("/api/usuarios/" + yo.getId()).with(user("yo-edito-test").roles("ADMINISTRADOR"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(edicion("yo-edito-test", "[\"ADMINISTRADOR\",\"ANALISTA\"]", true)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.roles", hasItems("ADMINISTRADOR", "ANALISTA")));
+    }
+
+    @Test void administradorQuitaElRolAOtroAdministrador() throws Exception {
+        crear("primer-admin-test", Rol.ADMINISTRADOR);
+        Usuario otro = crear("segundo-admin-test", Rol.ADMINISTRADOR);
+        mvc.perform(put("/api/usuarios/" + otro.getId()).with(user("primer-admin-test").roles("ADMINISTRADOR"))
+                        .contentType(MediaType.APPLICATION_JSON).content(edicion("segundo-admin-test", "[\"ANALISTA\"]", true)))
+                .andExpect(status().isOk());
+    }
+
+    @Test void noSeDejaAlSistemaSinAdministradorActivo() {
+        Usuario ultimo = crear("ultimo-admin-test", Rol.ADMINISTRADOR);
+        // Deja a este usuario como único administrador activo dentro de la transacción de prueba.
+        jdbc.update("UPDATE usuarios SET activo = false WHERE id <> ? AND id IN "
+                + "(SELECT usuario_id FROM usuario_roles WHERE rol = 'ADMINISTRADOR')", ultimo.getId());
+        entityManager.clear();
+
+        var quitarRol = new com.intendencia.gestion_morosidad_api.modules.usuario.dto.UsuarioUpdateRequest(
+                "ultimo-admin-test", Set.of(Rol.ANALISTA), true);
+        var desactivar = new com.intendencia.gestion_morosidad_api.modules.usuario.dto.UsuarioUpdateRequest(
+                "ultimo-admin-test", Set.of(Rol.ADMINISTRADOR), false);
+        for (var request : java.util.List.of(quitarRol, desactivar)) {
+            assertThatThrownBy(() -> servicio.updateUser(ultimo.getId(), request, "otro-usuario"))
+                    .isInstanceOf(com.intendencia.gestion_morosidad_api.shared.exception.ReglaNegocioException.class)
+                    .hasMessage("Debe quedar al menos un administrador activo.");
+        }
+        assertThat(usuarios.contarActivosConRol(Rol.ADMINISTRADOR)).isEqualTo(1);
+    }
+
+    @Test void nombreDeUsuarioEsUnicoSinDistinguirMayusculasNiEspacios() throws Exception {
+        crear("mayusculas-test", Rol.ANALISTA);
+        Usuario otro = crear("otro-nombre-test", Rol.ANALISTA);
+
+        mvc.perform(post("/api/usuarios").with(user("admin-test").roles("ADMINISTRADOR"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\":\" Mayusculas-TEST \",\"password\":\"prueba123\",\"roles\":[\"ANALISTA\"]}"))
+                .andExpect(status().isConflict());
+        mvc.perform(put("/api/usuarios/" + otro.getId()).with(user("admin-test").roles("ADMINISTRADOR"))
+                        .contentType(MediaType.APPLICATION_JSON).content(edicion("MAYUSCULAS-test", "[\"ANALISTA\"]", true)))
+                .andExpect(status().isConflict());
+        // Cambiar solo las mayúsculas del propio nombre no choca consigo mismo.
+        mvc.perform(put("/api/usuarios/" + otro.getId()).with(user("admin-test").roles("ADMINISTRADOR"))
+                        .contentType(MediaType.APPLICATION_JSON).content(edicion("Otro-Nombre-Test", "[\"ANALISTA\"]", true)))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.username").value("Otro-Nombre-Test"));
     }
 }

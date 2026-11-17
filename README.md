@@ -365,6 +365,14 @@ Para modificar una cuenta se envian `username`, `roles` y `activo`; la contrasen
 conserva. Cada cuenta exige al menos un rol. La pantalla mantiene el nombre de usuario
 sin cambios al editar y permite modificar roles y estado.
 
+El nombre de usuario es unico sin distinguir mayusculas ni espacios al inicio y al final
+(`Admin` y `admin` no pueden coexistir); un duplicado devuelve 409. El login sigue usando
+el nombre exacto guardado.
+
+El sistema nunca queda sin administrador: un administrador no puede quitarse el rol
+`ADMINISTRADOR` ni desactivar su propia cuenta, y no se puede quitar el rol ni desactivar
+al ultimo administrador activo. Ambos casos devuelven 400 sin modificar la cuenta.
+
 Login devuelve `roles` como lista. El JWT tambien incluye todos los roles y cada peticion
 consulta los roles y estado actuales en la base: un token ya emitido no conserva permisos
 revocados, y una cuenta desactivada pierde acceso. `GET /api/auth/me` permite actualizar
@@ -376,7 +384,8 @@ al reiniciar el backend; conserva usuarios, contrasenas y sus roles previos.
 
 `UsuarioPersistenciaTest` verifica la migracion con cuentas existentes, alta/login con
 varios roles, permisos combinados, revocacion con el mismo token, cuentas inactivas,
-reactivacion, roles obligatorios y duplicados. Se ejecuta exclusivamente con una base
+reactivacion, roles obligatorios, duplicados sin distinguir mayusculas y la proteccion del
+ultimo administrador. Se ejecuta exclusivamente con una base
 desechable configurada mediante `USUARIOS_TEST_DB_URL`.
 
 ## Configuracion de tributos
@@ -482,6 +491,13 @@ una gestion siguen filtrandose por el segmento de la deuda y por su estado activ
 
 `GestionPersistenciaTest` verifica el alta, su vinculo persistido, el listado por segmento,
 el registro de una gestion con la nueva accion y las validaciones sin registros parciales.
+
+`DELETE /api/acciones/{id}` elimina la accion junto con sus vinculos a segmentos (204). Si ya
+tiene gestiones registradas devuelve 400 y no borra nada: el historial se conserva y la accion
+se desactiva con `PUT /api/acciones/{id}` (`{"activo":false}`). `AccionAdministracionTest`
+cubre alta, duplicados (409), inexistentes (404), validaciones (400) y la baja, contra una base
+desechable indicada en `ACCIONES_TEST_DB_URL`. No usa `@Transactional` para que las claves
+foraneas se verifiquen al confirmar, como en produccion.
 
 
 ### Cartera agrupada por contribuyente

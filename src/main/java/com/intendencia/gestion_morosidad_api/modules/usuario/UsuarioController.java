@@ -9,6 +9,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.security.Principal;
 import java.util.List;
 
 @RestController
@@ -44,7 +45,7 @@ public class UsuarioController {
 
     //PUT /api/usuarios/1
     @PutMapping("/{id}")
-    public ResponseEntity<UsuarioResponse> update(@PathVariable Long id, @Valid @RequestBody UsuarioUpdateRequest usuarioUpdateRequest) {
-        return ResponseEntity.ok(usuarioService.updateUser(id, usuarioUpdateRequest));
+    public ResponseEntity<UsuarioResponse> update(@PathVariable Long id, @Valid @RequestBody UsuarioUpdateRequest usuarioUpdateRequest, Principal principal) {
+        return ResponseEntity.ok(usuarioService.updateUser(id, usuarioUpdateRequest, principal.getName()));
     }
 }

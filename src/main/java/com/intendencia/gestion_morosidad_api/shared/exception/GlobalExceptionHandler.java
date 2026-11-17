@@ -76,6 +76,19 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> inesperado(Exception ex) {
+        // Errores de protocolo de Spring MVC (ruta inexistente, método o content-type no soportado):
+        // conservan su código en lugar de convertirse en 500.
+        if (ex instanceof org.springframework.web.ErrorResponse error) {
+            HttpStatus status = HttpStatus.valueOf(error.getStatusCode().value());
+            String mensaje = switch (status) {
+                case NOT_FOUND -> "Recurso no encontrado";
+                case METHOD_NOT_ALLOWED -> "Método no permitido para esta ruta";
+                case UNSUPPORTED_MEDIA_TYPE -> "Tipo de contenido no soportado";
+                default -> "Solicitud inválida";
+            };
+            return ResponseEntity.status(status).headers(error.getHeaders())
+                    .body(ErrorResponse.de(status.value(), mensaje));
+        }
         log.error("Error no controlado", ex);
         return respuesta(HttpStatus.INTERNAL_SERVER_ERROR, "Ocurrió un error inesperado");
     }

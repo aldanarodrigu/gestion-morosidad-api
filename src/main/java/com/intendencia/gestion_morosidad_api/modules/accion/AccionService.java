@@ -5,6 +5,8 @@ import com.intendencia.gestion_morosidad_api.modules.accion.dto.AccionResponse;
 import com.intendencia.gestion_morosidad_api.modules.accion.dto.AccionUpdateRequest;
 import com.intendencia.gestion_morosidad_api.shared.exception.RecursoNoEncontradoException;
 import com.intendencia.gestion_morosidad_api.shared.exception.RecursoYaExisteException;
+import com.intendencia.gestion_morosidad_api.shared.exception.ReglaNegocioException;
+import com.intendencia.gestion_morosidad_api.modules.gestion.GestionRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,6 +27,7 @@ public class AccionService {
 
     private final AccionSegmentoRepository accionSegmentoRepository;
     private final SegmentoMoraRepository segmentoMoraRepository;
+    private final GestionRepository gestionRepository;
 
     public List<AccionResponse> getAllAcciones() {
         var porAccion = accionSegmentoRepository.findAllByOrderByIdAsc().stream()
@@ -94,6 +97,12 @@ public class AccionService {
                         "No se encontró la acción con id: " + id
                 ));
 
+        // Las gestiones registradas son historial: la acción se desactiva en lugar de borrarse.
+        if (gestionRepository.existsByAccion_Id(id)) {
+            throw new ReglaNegocioException(
+                    "No se puede eliminar una acción con gestiones registradas; desactivala para dejar de ofrecerla.");
+        }
+        accionSegmentoRepository.deleteAll(accionSegmentoRepository.findByAccion_Id(id));
         accionRepository.delete(accion);
     }
 

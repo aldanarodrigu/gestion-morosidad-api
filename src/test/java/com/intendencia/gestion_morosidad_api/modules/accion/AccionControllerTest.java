@@ -28,6 +28,7 @@ class AccionControllerTest {
     @MockitoBean AccionRepository repository;
     @MockitoBean com.intendencia.gestion_morosidad_api.modules.accion_segmento.AccionSegmentoRepository vinculos;
     @MockitoBean com.intendencia.gestion_morosidad_api.modules.segmento.repository.SegmentoMoraRepository segmentos;
+    @MockitoBean com.intendencia.gestion_morosidad_api.modules.gestion.GestionRepository gestiones;
     @MockitoBean JwtDecoder decoder;
     @MockitoBean JwtAuthenticationConverter converter;
 

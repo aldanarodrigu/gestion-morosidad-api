@@ -5,6 +5,7 @@ import com.intendencia.gestion_morosidad_api.modules.usuario.dto.UsuarioResponse
 import com.intendencia.gestion_morosidad_api.modules.usuario.dto.UsuarioUpdateRequest;
 import com.intendencia.gestion_morosidad_api.shared.exception.RecursoNoEncontradoException;
 import com.intendencia.gestion_morosidad_api.shared.exception.RecursoYaExisteException;
+import com.intendencia.gestion_morosidad_api.shared.exception.ReglaNegocioException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -44,7 +45,7 @@ public class UsuarioService {
     @Transactional
     public UsuarioResponse saveUser(UsuarioRequest usuarioRequest) {
 
-        if (usuarioRepository.existsByUsername(usuarioRequest.username().trim())) {
+        if (usuarioRepository.existsByUsernameIgnoreCase(usuarioRequest.username().trim())) {
             throw new RecursoYaExisteException("El usuario '" + usuarioRequest.username().trim() + "' ya existe");
         }
 
@@ -65,12 +66,26 @@ public class UsuarioService {
     @Transactional
     public UsuarioResponse updateUser(
             Long id,
-            UsuarioUpdateRequest request) {
+            UsuarioUpdateRequest request,
+            String usuarioActual) {
 
         Usuario usuario = usuarioRepository.findById(id).orElseThrow(() -> new RecursoNoEncontradoException("Usuario con id " + id + " no encontrado"));
 
-        if (!usuario.getUsername().equals(request.username().trim()) && usuarioRepository.existsByUsername(request.username().trim())) {
+        if (usuarioRepository.existsByUsernameIgnoreCaseAndIdNot(request.username().trim(), id)) {
             throw new RecursoYaExisteException("El usuario '" + request.username().trim() + "' ya existe");
+        }
+
+        // El sistema nunca queda sin administrador: nadie se quita el rol a sí mismo
+        // ni se baja al último administrador activo.
+        boolean eraAdministradorActivo = usuario.getActivo() && usuario.getRoles().contains(Rol.ADMINISTRADOR);
+        boolean quedaAdministradorActivo = request.activo() && request.roles().contains(Rol.ADMINISTRADOR);
+        if (eraAdministradorActivo && !quedaAdministradorActivo) {
+            if (usuario.getUsername().equals(usuarioActual)) {
+                throw new ReglaNegocioException("No podés quitarte el rol de administrador ni desactivar tu propia cuenta.");
+            }
+            if (usuarioRepository.contarActivosConRol(Rol.ADMINISTRADOR) <= 1) {
+                throw new ReglaNegocioException("Debe quedar al menos un administrador activo.");
+            }
         }
 
         usuario.setUsername(request.username().trim());

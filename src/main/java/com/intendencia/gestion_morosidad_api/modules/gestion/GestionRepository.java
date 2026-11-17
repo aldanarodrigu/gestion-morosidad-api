@@ -12,6 +12,8 @@ public interface GestionRepository extends JpaRepository<Gestion, Long> {
     @org.springframework.data.jpa.repository.EntityGraph(attributePaths = {"accion", "usuario", "deuda", "deuda.padron"})
     List<Gestion> findByDeuda_IdOrderByFechaDescIdDesc(Long deudaId);
 
+    boolean existsByAccion_Id(Long accionId);
+
     @Query("""
         SELECT g.deuda.id, COUNT(g)
         FROM Gestion g
