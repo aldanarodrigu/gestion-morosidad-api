@@ -149,12 +149,9 @@ public class CarteraExportacionService {
                 d.segmentoMora() == null ? "Sin segmento" : d.segmentoMora().nombre(),
                 d.diasAtraso() == null ? 0L : d.diasAtraso(), d.importe(), d.cantidadGestiones(),
                 unir(d.accionesSugeridas(), a -> a.nombre()), d.convenio() ? "Sí" : "No",
-<<<<<<< Updated upstream
-                d.conContacto() ? "Con datos" : "Sin datos", d.padron().matricula(),d.cantidadFacturasVencidas(),d.cantidadFacturasConDeuda(),d.anioDesde(),d.anioHasta(),d.cantidadAniosDeuda(),d.aniosDeuda());
-        fila.getCell(9).setCellStyle(dinero);
-=======
-                d.conContacto() ? "Con datos" : "Sin datos"};
->>>>>>> Stashed changes
+                d.conContacto() ? "Con datos" : "Sin datos", d.padron().matricula(),
+                d.cantidadFacturasVencidas(), d.cantidadFacturasConDeuda(), d.anioDesde(),
+                d.anioHasta(), d.cantidadAniosDeuda(), d.aniosDeuda()};
     }
 
     private static <T> String unir(List<T> elementos, Function<T, String> texto) {

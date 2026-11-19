@@ -148,10 +148,11 @@ class CarteraExportacionServiceTest {
         String csv = new String(archivo, StandardCharsets.UTF_8);
         String[] filas = csv.substring(1).split("\r\n");
         assertEquals(502, filas.length);
-        assertEquals(14, filas[0].split(";").length);
+        assertEquals(21, filas[0].split(";").length);
         assertTrue(filas[0].contains("\"Origen\";\"PadTipo\""));
         assertEquals("\"00042\";\"00078\";\"'=Nombre de prueba\";\"00123456\";\"SUCIVE\";\"CIU\";"
-                + "\"2800, Tasa\";\"Mora Tardía\";\"400\";\"1234.56\";\"2\";\"Llamada, Email\";\"Sí\";\"Con datos\"", filas[501]);
+                + "\"2800, Tasa\";\"Mora Tardía\";\"400\";\"1234.56\";\"2\";\"Llamada, Email\";\"Sí\";\"Con datos\";"
+                + "\"SAA0123\";\"5\";\"3\";\"2021\";\"2026\";\"2\";\"2021, 2026\"", filas[501]);
         verify(deudas, times(2)).listar(eq(filtro), any());
         verifyNoInteractions(grupos);
     }
