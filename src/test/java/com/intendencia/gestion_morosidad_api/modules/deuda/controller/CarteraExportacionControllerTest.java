@@ -55,6 +55,29 @@ class CarteraExportacionControllerTest {
     }
 
     @Test
+    void csvConservaFiltrosOrdenYAgrupacionYDevuelveTipoYNombreCorrectos() throws Exception {
+        var filtro = new DeudaFiltro(null, null, "001", null, 3L, null, true, "PAT", OrigenDatos.SUCIVE);
+        byte[] csv = "\uFEFF\"CM\"\r\n\"001\"\r\n".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        when(servicio.exportarCsv(filtro, Sort.by(Sort.Direction.DESC, "importe"), true)).thenReturn(csv);
+        mvc.perform(get("/api/deudas/exportar").with(user("usuario").roles("ANALISTA"))
+                        .param("formato", "CSV").param("contribuyente", "001").param("segmento", "3")
+                        .param("tipoPadron", "PAT").param("origen", "SUCIVE").param("conContacto", "true")
+                        .param("agrupar", "true").param("sort", "importe,desc").param("page", "10").param("size", "1"))
+                .andExpect(status().isOk()).andExpect(content().contentType("text/csv;charset=UTF-8"))
+                .andExpect(header().string("Content-Disposition", "attachment; filename=cartera-morosidad.csv"))
+                .andExpect(content().bytes(csv));
+        verify(servicio).exportarCsv(filtro, Sort.by(Sort.Direction.DESC, "importe"), true);
+        verify(servicio, never()).exportar(any(), any(), anyBoolean());
+    }
+
+    @Test
+    void rechazaFormatosDesconocidos() throws Exception {
+        mvc.perform(get("/api/deudas/exportar").with(user("usuario").roles("ANALISTA"))
+                        .param("formato", "PDF")).andExpect(status().isBadRequest());
+        verifyNoInteractions(servicio);
+    }
+
+    @Test
     void exigeAutenticacion() throws Exception {
         mvc.perform(get("/api/deudas/exportar")).andExpect(status().isUnauthorized());
         verifyNoInteractions(servicio);

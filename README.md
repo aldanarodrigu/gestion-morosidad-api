@@ -650,6 +650,13 @@ filtros, contactos, agrupacion y el endpoint de sincronizacion.
 
 ### Exportación de cartera a Excel
 
+El panel permite elegir **Excel (.xlsx)** (predeterminado) o **CSV (.csv)**. Ambos formatos
+usan los mismos filtros, columnas y todas las páginas. El CSV es una sola tabla de detalle,
+también cuando se agrupa; el resumen por contribuyente en una segunda hoja es exclusivo de XLSX.
+CSV usa UTF-8 con BOM, separador `;`, comillas escapadas y protección contra fórmulas.
+Para conservar tipos y ceros iniciales al abrir directamente en Excel, usar XLSX.
+El endpoint acepta `formato=XLSX|CSV`; omitirlo mantiene el comportamiento XLSX anterior.
+
 El botón **Exportar Excel** abre un panel con filtros opcionales de **segmento de mora**,
 **PadTipo** y **origen**. Se puede elegir uno, combinar varios o dejarlos todos vacíos.
 Estos filtros son independientes de los filtros del listado y comienzan vacíos.

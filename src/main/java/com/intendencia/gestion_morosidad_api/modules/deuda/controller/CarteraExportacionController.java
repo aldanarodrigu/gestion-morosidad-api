@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.*;
 @RequiredArgsConstructor
 public class CarteraExportacionController {
     private final CarteraExportacionService exportacionService;
+    public enum Formato { XLSX, CSV }
 
     @GetMapping("/exportar")
     @PreAuthorize("hasAnyRole('ADMINISTRADOR', 'NOTIFICADOR', 'ANALISTA')")
@@ -31,13 +32,17 @@ public class CarteraExportacionController {
             @RequestParam(required = false) String tipoPadron,
             @RequestParam(required = false) OrigenDatos origen,
             @RequestParam(defaultValue = "false") boolean agrupar,
+            @RequestParam(defaultValue = "XLSX") Formato formato,
             @PageableDefault(sort = "deudaDesde") Pageable pageable) throws IOException {
         var filtro = new DeudaFiltro(estado, padron, contribuyente, localidad, segmento, tributo,
                 conContacto, tipoPadron, origen);
-        byte[] archivo = exportacionService.exportar(filtro, pageable.getSort(), agrupar);
+        boolean csv = formato == Formato.CSV;
+        byte[] archivo = csv ? exportacionService.exportarCsv(filtro, pageable.getSort(), agrupar)
+                : exportacionService.exportar(filtro, pageable.getSort(), agrupar);
         return ResponseEntity.ok()
-                .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
-                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=cartera-morosidad.xlsx")
+                .contentType(MediaType.parseMediaType(csv ? "text/csv;charset=UTF-8"
+                        : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=cartera-morosidad." + (csv ? "csv" : "xlsx"))
                 .cacheControl(CacheControl.noStore())
                 .body(archivo);
     }

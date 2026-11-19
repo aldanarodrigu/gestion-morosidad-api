@@ -12,6 +12,7 @@ import com.intendencia.gestion_morosidad_api.shared.dto.PaginaResponse;
 import com.intendencia.gestion_morosidad_api.shared.enums.OrigenDatos;
 import java.io.ByteArrayInputStream;
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.stream.IntStream;
 import org.apache.poi.ss.usermodel.*;
@@ -134,6 +135,54 @@ class CarteraExportacionServiceTest {
         verify(grupos).listar(filtro, PageRequest.of(0, 500, orden));
         verify(grupos).listar(filtro, PageRequest.of(1, 500, orden));
         verifyNoMoreInteractions(grupos);
+    }
+
+    @Test
+    void csvExportaTodasLasPaginasColumnasYFiltrosSinGenerarFormulas() throws Exception {
+        Sort estable = orden.and(Sort.by("id"));
+        when(deudas.listar(filtro, PageRequest.of(0, 500, estable))).thenReturn(new PaginaResponse<>(
+                IntStream.range(0, 500).mapToObj(i -> deuda(i)).toList(), 0, 500, 501, 2));
+        when(deudas.listar(filtro, PageRequest.of(1, 500, estable))).thenReturn(new PaginaResponse<>(List.of(deuda(501)), 1, 500, 501, 2));
+        byte[] archivo = servicio.exportarCsv(filtro, orden, false);
+        assertArrayEquals(new byte[]{(byte) 0xEF, (byte) 0xBB, (byte) 0xBF}, java.util.Arrays.copyOf(archivo, 3));
+        String csv = new String(archivo, StandardCharsets.UTF_8);
+        String[] filas = csv.substring(1).split("\r\n");
+        assertEquals(502, filas.length);
+        assertEquals(14, filas[0].split(";").length);
+        assertTrue(filas[0].contains("\"Origen\";\"PadTipo\""));
+        assertEquals("\"00042\";\"00078\";\"'=Nombre de prueba\";\"00123456\";\"SUCIVE\";\"CIU\";"
+                + "\"2800, Tasa\";\"Mora Tardía\";\"400\";\"1234.56\";\"2\";\"Llamada, Email\";\"Sí\";\"Con datos\"", filas[501]);
+        verify(deudas, times(2)).listar(eq(filtro), any());
+        verifyNoInteractions(grupos);
+    }
+
+    @Test
+    void csvEscapaSeparadoresComillasSaltosDeLineaYFormulasConEspaciosIniciales() throws Exception {
+        var especial = deuda(1).toBuilder().contribuyente(new ContribuyenteResponse("00042", " \t=SUM(1;2)\r\n\"Texto\"", null)).build();
+        when(deudas.listar(any(), any())).thenReturn(new PaginaResponse<>(List.of(especial), 0, 500, 1, 1));
+        String csv = new String(servicio.exportarCsv(filtro, orden, false), StandardCharsets.UTF_8);
+        assertTrue(csv.contains("\"' \t=SUM(1;2)\r\n\"\"Texto\"\"\";\"\";\"SUCIVE\""));
+    }
+
+    @Test
+    void csvAgrupadoIncluyeTodasLasDeudasSinMezclarTablasDeResumen() throws Exception {
+        var grupo = new DeudasAgrupadasResponse("DOC:00123456", "00123456", List.of("Persona"),
+                new BigDecimal("2469.12"), 400L, tardia, List.of(deuda(1), deuda(2)));
+        when(grupos.listar(filtro, PageRequest.of(0, 500, orden))).thenReturn(new PaginaResponse<>(List.of(grupo), 0, 500, 501, 2));
+        when(grupos.listar(filtro, PageRequest.of(1, 500, orden))).thenReturn(new PaginaResponse<>(List.of(grupo), 1, 500, 501, 2));
+        String csv = new String(servicio.exportarCsv(filtro, orden, true), StandardCharsets.UTF_8);
+        assertEquals(5, csv.substring(1).split("\r\n").length);
+        assertFalse(csv.contains("Deuda total"));
+        verify(grupos, times(2)).listar(eq(filtro), any());
+        verifyNoInteractions(deudas);
+    }
+
+    @Test
+    void csvVacioMantieneSoloLosEncabezados() throws Exception {
+        when(deudas.listar(any(), any())).thenReturn(new PaginaResponse<>(List.of(), 0, 500, 0, 0));
+        String csv = new String(servicio.exportarCsv(filtro, Sort.unsorted(), false), StandardCharsets.UTF_8);
+        assertEquals(1, csv.substring(1).split("\r\n").length);
+        assertTrue(csv.startsWith("\uFEFF\"CM\";\"N.º padrón\""));
     }
 
     @Test
