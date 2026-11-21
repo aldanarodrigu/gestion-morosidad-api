@@ -4,7 +4,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
 import com.intendencia.gestion_morosidad_api.shared.enums.OrigenDatos;
 
@@ -13,7 +12,6 @@ import com.intendencia.gestion_morosidad_api.shared.enums.OrigenDatos;
  * SINCRONIZACION_AUTOMATICA=false permite deshabilitarla y SINCRONIZACION_CRON cambiar el horario.
  */
 @Configuration
-@EnableScheduling
 @ConditionalOnProperty(name = "sincronizacion.automatica.habilitada", havingValue = "true")
 @RequiredArgsConstructor
 @Slf4j

@@ -19,8 +19,13 @@ public class AuthService {
     private final AuthenticationManager authenticationManager;
     private final UsuarioRepository usuarioRepository;
     private final TokenService tokenService;
+    private final LimitadorLogin limite;
 
     public LoginResponse login(LoginRequest request) {
+        return limite.autenticar(request.username(), () -> validarCredenciales(request));
+    }
+
+    private LoginResponse validarCredenciales(LoginRequest request) {
         if (PoliticaPassword.superaLimiteBcrypt(request.password())) {
             throw new BadCredentialsException("Credenciales inválidas");
         }

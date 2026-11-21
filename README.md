@@ -123,6 +123,13 @@ Para el primer arranque con el perfil `prod` y una base vacía, definí `ADMIN_B
 Después de crear la cuenta inicial, podés retirar la variable. Si reutilizás una base donde la cuenta
 local conserva su contraseña de prueba, cambiala antes de exponer el sistema.
 
+El inicio de sesión acumula hasta cinco fallos por cuenta dentro de una ventana de 15 minutos.
+Al alcanzar el límite, los intentos siguientes reciben HTTP 429 con el tiempo restante en
+`Retry-After`. Un inicio válido limpia el contador y el bloqueo se vence por sí solo.
+Los parámetros `LOGIN_MAX_FALLOS`, `LOGIN_VENTANA_SEGUNDOS` y `LOGIN_BLOQUEO_SEGUNDOS` pueden
+configurarse en `.env`. El contador se guarda en PostgreSQL y se aplica también a nombres de
+usuario inexistentes. Afecta únicamente a los nuevos intentos de inicio de sesión.
+
 ## Sincronización con GeoPagos
 
 Las consultas de la API (deudas, contribuyentes, padrones) **solo leen la base propia**: nunca

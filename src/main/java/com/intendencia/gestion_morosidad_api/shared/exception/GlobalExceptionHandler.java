@@ -5,6 +5,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.core.PropertyReferenceException;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -106,6 +107,13 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(RecursoYaExisteException.class)
     public ResponseEntity<ErrorResponse> yaExiste(RecursoYaExisteException ex) {
         return respuesta(HttpStatus.CONFLICT, ex.getMessage());
+    }
+
+    @ExceptionHandler(LoginBloqueadoException.class)
+    public ResponseEntity<ErrorResponse> loginBloqueado(LoginBloqueadoException ex) {
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header(HttpHeaders.RETRY_AFTER, Long.toString(ex.reintentarEnSegundos()))
+                .body(ErrorResponse.de(429, ex.getMessage()));
     }
 
     /** Login fallido: BadCredentialsException, DisabledException, LockedException, etc. */

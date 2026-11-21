@@ -1,13 +1,19 @@
 package com.intendencia.gestion_morosidad_api.config;
 
+import com.intendencia.gestion_morosidad_api.modules.auth.LimitadorLogin;
 import com.intendencia.gestion_morosidad_api.modules.usuario.Rol;
 import com.intendencia.gestion_morosidad_api.modules.usuario.Usuario;
 import com.intendencia.gestion_morosidad_api.modules.usuario.UsuarioRepository;
 import com.jayway.jsonpath.JsonPath;
 import java.time.Instant;
+import java.time.OffsetDateTime;
 import java.util.Base64;
+import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.Callable;
+import java.util.concurrent.Executors;
+import java.util.stream.IntStream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -30,7 +36,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @TestPropertySource(locations = {"classpath:application.properties", "classpath:application-prod.properties"})
 @SpringBootTest(properties = {"spring.config.name=arranque-aislado", "spring.config.import=",
     "sincronizacion.automatica.habilitada=false", "geopagos.username=", "geopagos.password=",
-    "ADMIN_BOOTSTRAP_PASSWORD=clave-administrador-prueba"})
+    "ADMIN_BOOTSTRAP_PASSWORD=clave-administrador-prueba", "auth.login.max-fallos=5",
+    "auth.login.ventana-segundos=900", "auth.login.bloqueo-segundos=900"})
 @ActiveProfiles("prod")
 @AutoConfigureMockMvc
 class PasswordPersistenciaTest {
@@ -42,6 +49,7 @@ class PasswordPersistenciaTest {
     @Autowired UsuarioRepository usuarios;
     @Autowired PasswordEncoder encoder;
     @Autowired JdbcTemplate jdbc;
+    @Autowired LimitadorLogin limitador;
 
     @DynamicPropertySource
     static void database(DynamicPropertyRegistry r) {
@@ -140,6 +148,74 @@ class PasswordPersistenciaTest {
     void prodNoAceptaLaClaveLocalPorDefecto() throws Exception {
         rechazarLogin("admin", "admin123");
         iniciarSesion("admin", ADMIN, false);
+    }
+
+    @Test
+    void cincoFallosBloqueanLaCuentaYReintentarNoProlongaElBloqueo() throws Exception {
+        String cuenta = crear(Rol.ANALISTA).getUsername();
+        String otraCuenta = crear(Rol.NOTIFICADOR).getUsername();
+        String tokenVigente = iniciarSesion(cuenta, ACTUAL, false);
+        for (int i = 0; i < 5; i++) {
+            rechazarLogin(i % 2 == 0 ? cuenta : " " + cuenta.toUpperCase(Locale.ROOT) + " ", "clave-incorrecta");
+        }
+        OffsetDateTime vence = jdbc.queryForObject(
+                "SELECT vence_en FROM intentos_login WHERE cuenta = ?", OffsetDateTime.class, cuenta);
+
+        mvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
+                        .content(login(cuenta, ACTUAL)))
+                .andExpect(status().isTooManyRequests()).andExpect(header().exists("Retry-After"))
+                .andExpect(jsonPath("$.mensaje").value(org.hamcrest.Matchers.startsWith("Demasiados intentos")));
+        assertThat(jdbc.queryForObject("SELECT vence_en FROM intentos_login WHERE cuenta = ?", OffsetDateTime.class, cuenta))
+                .isEqualTo(vence);
+        iniciarSesion(otraCuenta, ACTUAL, false);
+        mvc.perform(get("/api/auth/me").header("Authorization", tokenVigente)).andExpect(status().isOk());
+
+        vencerContador(cuenta);
+        iniciarSesion(cuenta, ACTUAL, false);
+        assertThat(filasDeIntentos(cuenta)).isZero();
+    }
+
+    @Test
+    void elLoginCorrectoReiniciaElContadorYLosFallosFueraDeLaVentanaNoSeAcumulan() throws Exception {
+        String cuenta = crear(Rol.ANALISTA).getUsername();
+        for (int i = 0; i < 4; i++) rechazarLogin(cuenta, "clave-incorrecta");
+        iniciarSesion(cuenta, ACTUAL, false);
+        assertThat(filasDeIntentos(cuenta)).isZero();
+
+        for (int i = 0; i < 4; i++) rechazarLogin(cuenta, "clave-incorrecta");
+        vencerContador(cuenta);
+        rechazarLogin(cuenta, "clave-incorrecta");
+        assertThat(jdbc.queryForObject("SELECT fallos FROM intentos_login WHERE cuenta = ?", Integer.class, cuenta))
+                .isEqualTo(1);
+        iniciarSesion(cuenta, ACTUAL, false);
+    }
+
+    @Test
+    void peticionesSimultaneasCompartenLimiteInclusoParaUnUsuarioInexistente() throws Exception {
+        String cuenta = "inexistente-" + UUID.randomUUID();
+        try (var executor = Executors.newFixedThreadPool(8)) {
+            var intentos = IntStream.range(0, 8).mapToObj(i -> (Callable<Integer>) () ->
+                    mvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
+                                    .content(login(cuenta, "clave-incorrecta")))
+                            .andReturn().getResponse().getStatus()).toList();
+            var estados = new java.util.ArrayList<Integer>();
+            for (var resultado : executor.invokeAll(intentos)) estados.add(resultado.get());
+            assertThat(estados).containsExactlyInAnyOrder(401, 401, 401, 401, 401, 429, 429, 429);
+        }
+
+        assertThat(jdbc.queryForObject("SELECT fallos FROM intentos_login WHERE cuenta = ?", Integer.class, cuenta))
+                .isEqualTo(5);
+        vencerContador(cuenta);
+        limitador.limpiarVencidos();
+        assertThat(filasDeIntentos(cuenta)).isZero();
+    }
+
+    private long filasDeIntentos(String cuenta) {
+        return jdbc.queryForObject("SELECT count(*) FROM intentos_login WHERE cuenta = ?", Long.class, cuenta);
+    }
+
+    private void vencerContador(String cuenta) {
+        jdbc.update("UPDATE intentos_login SET vence_en = now() - interval '1 second' WHERE cuenta = ?", cuenta);
     }
 
     private Usuario crear(Rol... roles) {
