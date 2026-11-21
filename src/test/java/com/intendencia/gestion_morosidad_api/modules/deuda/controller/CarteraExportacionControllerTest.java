@@ -29,8 +29,8 @@ class CarteraExportacionControllerTest {
     @MockitoBean JwtAuthenticationConverter converter;
 
     @ParameterizedTest
-    @ValueSource(strings = {"ADMINISTRADOR", "NOTIFICADOR", "ANALISTA"})
-    void todosLosRolesExportanSinLimiteDePagina(String rol) throws Exception {
+    @ValueSource(strings = {"ANALISTA"})
+    void analistaExportaSinLimiteDePagina(String rol) throws Exception {
         var filtro = new DeudaFiltro(null, null, "001", null, 3L, null, true, "CIU", OrigenDatos.SUCIVE);
         byte[] archivo = {80, 75, 3, 4};
         when(servicio.exportar(filtro, Sort.by(Sort.Direction.DESC, "importe"), true)).thenReturn(archivo);
@@ -81,5 +81,18 @@ class CarteraExportacionControllerTest {
     void exigeAutenticacion() throws Exception {
         mvc.perform(get("/api/deudas/exportar")).andExpect(status().isUnauthorized());
         verifyNoInteractions(servicio);
+    }
+    @ParameterizedTest
+    @ValueSource(strings={"ADMINISTRADOR", "NOTIFICADOR"})
+    void sinAnalistaNoExportaNingunFormato(String rol) throws Exception {
+        for (String formato : new String[]{"XLSX", "CSV"})
+            mvc.perform(get("/api/deudas/exportar").param("formato",formato).with(user("usuario").roles(rol)))
+                .andExpect(status().isForbidden());
+        verifyNoInteractions(servicio);
+    }
+    @Test void variosRolesIncluidoAnalistaPermitenExportar() throws Exception {
+        mvc.perform(get("/api/deudas/exportar").with(user("mixto").roles("ADMINISTRADOR","NOTIFICADOR","ANALISTA")))
+            .andExpect(status().isOk());
+        verify(servicio).exportar(any(),any(),eq(false));
     }
 }

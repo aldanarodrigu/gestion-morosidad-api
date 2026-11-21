@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.*;
 public class ReporteController {
     private final ReporteService service;
     @GetMapping public ReporteCartera consultar(@RequestParam(required=false) OrigenDatos origen,@RequestParam(required=false) String tipoPadron,@RequestParam(required=false) Long segmento) {return service.consultar(origen,tipoPadron,segmento);}
+    @PreAuthorize("hasRole('ANALISTA')")
     @GetMapping("/exportar") public ResponseEntity<byte[]> exportar(@RequestParam(required=false) OrigenDatos origen,@RequestParam(required=false) String tipoPadron,@RequestParam(required=false) Long segmento) throws IOException {
         return ResponseEntity.ok().contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
             .header(HttpHeaders.CONTENT_DISPOSITION,"attachment; filename=reporte-cartera.xlsx").cacheControl(CacheControl.noStore()).body(service.exportar(origen,tipoPadron,segmento));

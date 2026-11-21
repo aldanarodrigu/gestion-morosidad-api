@@ -215,7 +215,7 @@ class RendimientoPersistenciaTest {
     }
 
     void ejecutar(String ruta) throws Exception {
-        mvc.perform(get(ruta).with(user("rendimiento").roles("ADMINISTRADOR"))).andExpect(status().isOk());
+        mvc.perform(get(ruta).with(user("rendimiento").roles("ADMINISTRADOR","ANALISTA"))).andExpect(status().isOk());
     }
 
     static String formato(Duration d) {

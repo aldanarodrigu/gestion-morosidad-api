@@ -128,14 +128,14 @@ class MatrizPermisosTest {
             new Endpoint("GET", "/api/deudas/{id}/facturas", TODOS),
             new Endpoint("GET", "/api/deudas/{id}/historial-contribuyentes", TODOS),
             new Endpoint("GET", "/api/deudas/agrupadas", TODOS),
-            new Endpoint("GET", "/api/deudas/exportar", TODOS),
+            new Endpoint("GET", "/api/deudas/exportar", EnumSet.of(Rol.ANALISTA)),
             new Endpoint("PUT", "/api/deudas/{id}/estado", ADMIN, """
                     {"estado":"EN_GESTION"}"""),
             new Endpoint("GET", "/api/padrones/{numPadron}/deudas", TODOS),
             new Endpoint("GET", "/api/contribuyentes/{cm}/deudas", TODOS),
             new Endpoint("GET", "/api/convenios", TODOS),
             new Endpoint("GET", "/api/reportes/cartera", TODOS),
-            new Endpoint("GET", "/api/reportes/cartera/exportar", TODOS),
+            new Endpoint("GET", "/api/reportes/cartera/exportar", EnumSet.of(Rol.ANALISTA)),
             new Endpoint("GET", "/api/capturas-cartera", TODOS),
             new Endpoint("GET", "/api/capturas-cartera/{id}", TODOS),
             new Endpoint("POST", "/api/capturas-cartera", TODOS, """

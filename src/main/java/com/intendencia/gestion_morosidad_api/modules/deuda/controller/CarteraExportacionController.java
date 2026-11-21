@@ -20,7 +20,7 @@ public class CarteraExportacionController {
     public enum Formato { XLSX, CSV }
 
     @GetMapping("/exportar")
-    @PreAuthorize("hasAnyRole('ADMINISTRADOR', 'NOTIFICADOR', 'ANALISTA')")
+    @PreAuthorize("hasRole('ANALISTA')")
     public ResponseEntity<byte[]> exportar(
             @RequestParam(required = false) EstadoDeuda estado,
             @RequestParam(required = false) String padron,

@@ -25,12 +25,25 @@ class ReporteControllerTest {
  @MockitoBean JwtDecoder decoder;
  @MockitoBean JwtAuthenticationConverter converter;
  @ParameterizedTest @ValueSource(strings={"ADMINISTRADOR","NOTIFICADOR","ANALISTA"})
- void permiteConsultarYExportarConFiltros(String rol) throws Exception {
-  when(service.exportar(com.intendencia.gestion_morosidad_api.shared.enums.OrigenDatos.SUCIVE,"PAT",3L)).thenReturn(new byte[]{80,75});
+ void permiteConsultarConFiltros(String rol) throws Exception {
   mvc.perform(get("/api/reportes/cartera").with(user("usuario").roles(rol)).param("origen","SUCIVE").param("tipoPadron","PAT").param("segmento","3")).andExpect(status().isOk());
   verify(service).consultar(com.intendencia.gestion_morosidad_api.shared.enums.OrigenDatos.SUCIVE,"PAT",3L);
-  mvc.perform(get("/api/reportes/cartera/exportar").with(user("usuario").roles(rol)).param("origen","SUCIVE").param("tipoPadron","PAT").param("segmento","3")).andExpect(status().isOk()).andExpect(header().string("Content-Disposition","attachment; filename=reporte-cartera.xlsx"));
+
  }
  @Test void exigeAutenticacion() throws Exception {mvc.perform(get("/api/reportes/cartera")).andExpect(status().isUnauthorized());mvc.perform(get("/api/reportes/cartera/exportar")).andExpect(status().isUnauthorized());verifyNoInteractions(service);}
  @Test void rechazaOrigenInvalido() throws Exception {mvc.perform(get("/api/reportes/cartera").with(user("a").roles("ANALISTA")).param("origen","OTRO")).andExpect(status().isBadRequest());verifyNoInteractions(service);}
+
+ @ParameterizedTest @ValueSource(strings={"ADMINISTRADOR","NOTIFICADOR"})
+ void sinAnalistaNoExporta(String rol) throws Exception {
+  mvc.perform(get("/api/reportes/cartera/exportar").with(user("usuario").roles(rol))).andExpect(status().isForbidden());
+  verifyNoInteractions(service);
+ }
+ @Test void analistaYUsuarioConVariosRolesExportanConFiltros() throws Exception {
+  var origen=com.intendencia.gestion_morosidad_api.shared.enums.OrigenDatos.SUCIVE;
+  when(service.exportar(origen,"PAT",3L)).thenReturn(new byte[]{80,75});
+  for(String[] roles:new String[][]{{"ANALISTA"},{"ADMINISTRADOR","NOTIFICADOR","ANALISTA"}})
+   mvc.perform(get("/api/reportes/cartera/exportar").with(user("usuario").roles(roles)).param("origen","SUCIVE").param("tipoPadron","PAT").param("segmento","3"))
+    .andExpect(status().isOk()).andExpect(header().string("Content-Disposition","attachment; filename=reporte-cartera.xlsx"));
+  verify(service,times(2)).exportar(origen,"PAT",3L);
+ }
 }

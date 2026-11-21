@@ -675,7 +675,7 @@ Consulta únicamente la base local: no dispara sincronizaciones ni llamadas a Ge
   deuda total; la hoja Cartera conserva el detalle completo de esas deudas.
 - CM, número de padrón y documento se guardan como texto para conservar ceros iniciales.
   Deuda, días y cantidad de gestiones son celdas numéricas.
-- Administrador, Notificador y Analista pueden exportar. Se requiere autenticación.
+- Solo los usuarios con rol Analista pueden exportar, también cuando tienen otros roles. Se requiere autenticación.
 - Endpoint: `GET /api/deudas/exportar`. Acepta los mismos filtros y `sort` del listado,
   además de `agrupar=true|false`. `page` y `size` no limitan la exportación.
 - La lectura interna se realiza por lotes dentro de una misma transacción de solo lectura
@@ -759,7 +759,7 @@ prueba ni carga una página para calcular los totales en el navegador.
 - `GET /api/reportes/cartera/exportar`: descarga `reporte-cartera.xlsx` con los mismos
   filtros, resumen, distribución por mora, por PadTipo, por origen y desglose por origen/PadTipo.
   Importes, cantidades y porcentajes se guardan como valores numéricos.
-- Administrador, Notificador y Analista tienen acceso a consulta y exportación.
+- Administrador, Notificador y Analista tienen acceso a consulta. La exportación requiere Analista, solo o combinado con otros roles. Criterio pendiente de validación con el cliente.
 - No requiere nuevas tablas ni migraciones. No llama a GeoPagos ni a SUCIVE.
 - La fecha de generación no es una fecha de sincronización. Para actualizar los datos
   externos se debe ejecutar la sincronización correspondiente.

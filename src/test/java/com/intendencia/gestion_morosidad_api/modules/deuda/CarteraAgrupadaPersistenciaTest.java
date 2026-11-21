@@ -103,7 +103,7 @@ class CarteraAgrupadaPersistenciaTest {
         consultar(get("/api/reportes/cartera")).andExpect(jsonPath("$.totales.importe").value(100));
         consultar(get("/api/contribuyentes/id/"+c.getId()+"/deudas"))
             .andExpect(jsonPath("$.length()").value(1)).andExpect(jsonPath("$[0].deudaDesde").value("2013-01-01"));
-        var bytes=consultar(get("/api/deudas/exportar")).andReturn().getResponse().getContentAsByteArray();
+        var bytes=consultar(get("/api/deudas/exportar").with(user("analista").roles("ANALISTA"))).andReturn().getResponse().getContentAsByteArray();
         try(var x=org.apache.poi.ss.usermodel.WorkbookFactory.create(new java.io.ByteArrayInputStream(bytes))){
             org.junit.jupiter.api.Assertions.assertEquals(1,x.getSheet("Cartera").getLastRowNum());
         }
