@@ -47,7 +47,7 @@ class CarteraExportacionServiceTest {
         try (var libro = WorkbookFactory.create(new ByteArrayInputStream(servicio.exportar(filtro, orden, false)))) {
             var hoja = libro.getSheet("Cartera");
             assertEquals(501, hoja.getLastRowNum());
-            assertEquals(21, hoja.getRow(0).getLastCellNum());
+            assertEquals(20, hoja.getRow(0).getLastCellNum());
             assertEquals("PadTipo", hoja.getRow(0).getCell(5).getStringCellValue());
             assertEquals("Gestiones", hoja.getRow(0).getCell(10).getStringCellValue());
             var r = hoja.getRow(501);
@@ -60,17 +60,18 @@ class CarteraExportacionServiceTest {
             assertEquals("2800, Tasa", r.getCell(6).getStringCellValue());
             assertEquals(1234.56, r.getCell(9).getNumericCellValue(), 0.001);
             assertEquals(2, r.getCell(10).getNumericCellValue());
-            assertEquals("Llamada, Email", r.getCell(11).getStringCellValue());
-            assertEquals("Sí", r.getCell(12).getStringCellValue());
-            assertEquals("Con datos", r.getCell(13).getStringCellValue());
-            assertEquals("Matrícula", hoja.getRow(0).getCell(14).getStringCellValue());
-            assertEquals("SAA0123", r.getCell(14).getStringCellValue());
-            assertEquals(5, r.getCell(15).getNumericCellValue());
-            assertEquals(3, r.getCell(16).getNumericCellValue());
-            assertEquals(2021, r.getCell(17).getNumericCellValue());
-            assertEquals(2026, r.getCell(18).getNumericCellValue());
-            assertEquals(2, r.getCell(19).getNumericCellValue());
-            assertEquals("2021, 2026", r.getCell(20).getStringCellValue());
+            assertEquals(20, r.getLastCellNum());
+            assertEquals("Convenio", hoja.getRow(0).getCell(11).getStringCellValue());
+            assertEquals("Sí", r.getCell(11).getStringCellValue());
+            assertEquals("Con datos", r.getCell(12).getStringCellValue());
+            assertEquals("Matrícula", hoja.getRow(0).getCell(13).getStringCellValue());
+            assertEquals("SAA0123", r.getCell(13).getStringCellValue());
+            assertEquals(5, r.getCell(14).getNumericCellValue());
+            assertEquals(3, r.getCell(15).getNumericCellValue());
+            assertEquals(2021, r.getCell(16).getNumericCellValue());
+            assertEquals(2026, r.getCell(17).getNumericCellValue());
+            assertEquals(2, r.getCell(18).getNumericCellValue());
+            assertEquals("2021, 2026", r.getCell(19).getStringCellValue());
             assertNotNull(hoja.getPaneInformation());
         }
         verifyNoInteractions(grupos);
@@ -148,10 +149,11 @@ class CarteraExportacionServiceTest {
         String csv = new String(archivo, StandardCharsets.UTF_8);
         String[] filas = csv.substring(1).split("\r\n");
         assertEquals(502, filas.length);
-        assertEquals(21, filas[0].split(";").length);
+        assertEquals(20, filas[0].split(";").length);
+        assertFalse(filas[0].contains("Acción sugerida"));
         assertTrue(filas[0].contains("\"Origen\";\"PadTipo\""));
         assertEquals("\"00042\";\"00078\";\"'=Nombre de prueba\";\"00123456\";\"SUCIVE\";\"CIU\";"
-                + "\"2800, Tasa\";\"Mora Tardía\";\"400\";\"1234.56\";\"2\";\"Llamada, Email\";\"Sí\";\"Con datos\";"
+                + "\"2800, Tasa\";\"Mora Tardía\";\"400\";\"1234.56\";\"2\";\"Sí\";\"Con datos\";"
                 + "\"SAA0123\";\"5\";\"3\";\"2021\";\"2026\";\"2\";\"2021, 2026\"", filas[501]);
         verify(deudas, times(2)).listar(eq(filtro), any());
         verifyNoInteractions(grupos);

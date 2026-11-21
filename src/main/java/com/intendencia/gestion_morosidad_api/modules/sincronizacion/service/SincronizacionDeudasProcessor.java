@@ -3,6 +3,8 @@ package com.intendencia.gestion_morosidad_api.modules.sincronizacion.service;
 import com.intendencia.gestion_morosidad_api.integration.intendencia.geopagos.dto.GeoPagosContribuyenteDto;
 import com.intendencia.gestion_morosidad_api.integration.intendencia.geopagos.dto.GeoPagosFacturaCanceladaDto;
 import com.intendencia.gestion_morosidad_api.integration.intendencia.geopagos.dto.GeoPagosFacturaPendienteDto;
+import com.intendencia.gestion_morosidad_api.modules.cancelacion.Cancelacion;
+import com.intendencia.gestion_morosidad_api.modules.cancelacion.CancelacionRepository;
 import com.intendencia.gestion_morosidad_api.modules.contacto.TipoContacto;
 import com.intendencia.gestion_morosidad_api.modules.contacto.service.SincronizacionContactosService;
 import com.intendencia.gestion_morosidad_api.modules.contacto.service.SincronizacionContactosService.Dato;
@@ -57,6 +59,7 @@ class SincronizacionDeudasProcessor {
     private final SincronizacionContactosService sincronizacionContactosService;
     private final TributoRepository tributoRepository;
     private final ConfiguracionSegmentoService configuracionSegmentoService;
+    private final CancelacionRepository cancelacionRepository;
     private final Clock clock;
 
     @Transactional
@@ -379,8 +382,16 @@ class SincronizacionDeudasProcessor {
     }
 
     private void registrarCobros(List<GeoPagosFacturaCanceladaDto> canceladas, Contexto ctx) {
+        List<Cancelacion> registros = new ArrayList<>();
         for (GeoPagosFacturaCanceladaDto cobro : canceladas) {
+            if (cobro == null) continue;
             String cm = texto(cobro.cm());
+            String numeroCobro = texto(cobro.numeroCobro());
+            if (cm != null && numeroCobro != null && cobro.fechaCobro() != null) {
+                registros.add(new Cancelacion(null, ctx.origen, cm, numeroCobro, texto(cobro.numeroPadron()),
+                        texto(cobro.persona()), texto(cobro.documento()), cobro.fechaCobro(),
+                        cobro.importeTotal(), texto(cobro.motivoAnulacion()), ctx.ahora));
+            }
             // La consulta de contribuyentes no incluye DOCUMENTO. Un cobro reciente puede
             // completarlo para un padrÃ³n que ya no tiene facturas pendientes.
             if (!ctx.cmsProcesados.contains(cm)) {
@@ -412,6 +423,7 @@ class SincronizacionDeudasProcessor {
                 deuda.setMotivoUltimoCobro(limitar(texto(cobro.motivoAnulacion()), 60));
             }
         }
+        cancelacionRepository.guardar(registros);
     }
 
     /** CM, padrÃ³n, documento, etc. pueden llegar como nÃºmero o texto: siempre se guardan como texto. */

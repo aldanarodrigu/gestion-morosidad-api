@@ -74,6 +74,17 @@ UPDATE deuda SET motivo_ultimo_cobro=CASE WHEN motivo_ultimo_cobro IS NULL THEN 
 UPDATE acciones SET nombre='Accion de prueba '||id,descripcion=CASE WHEN descripcion IS NULL THEN NULL ELSE 'Descripcion de prueba' END;
 UPDATE tributos SET descripcion=CASE WHEN descripcion IS NULL THEN NULL ELSE 'Tributo de prueba '||id END;
 UPDATE segmentos_mora SET descripcion=CASE WHEN descripcion IS NULL THEN NULL ELSE 'Segmento de prueba' END;
+DO $$
+BEGIN
+    IF to_regclass('public.cancelaciones') IS NOT NULL THEN
+        UPDATE cancelaciones SET cm='QA-'||md5('{salt}'||origen||':'||cm),
+         numero_padron=CASE WHEN numero_padron IS NULL THEN NULL ELSE 'P'||md5('{salt}'||numero_padron) END,
+         numero_cobro='C'||md5('{salt}'||origen||':'||numero_cobro),
+         persona=CASE WHEN persona IS NULL THEN NULL ELSE 'Persona de prueba' END,
+         documento=CASE WHEN documento IS NULL THEN NULL WHEN trim(documento)='' THEN '' ELSE 'D'||md5('{salt}'||trim(documento)) END,
+         motivo=CASE WHEN motivo IS NULL THEN NULL ELSE 'Motivo de prueba' END;
+    END IF;
+END $$;
 COMMIT;
 """)
         print("Copia anonimizada: " + sql(copia, "SELECT count(*)||' contribuyentes' FROM contribuyentes"), flush=True)

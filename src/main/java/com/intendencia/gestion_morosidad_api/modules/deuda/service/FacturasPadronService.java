@@ -19,10 +19,15 @@ public class FacturasPadronService {
             throw new ReglaNegocioException("Estado de factura inválido.");
         var deuda = deudas.findById(deudaId).orElseThrow(() -> new RecursoNoEncontradoException("No existe la deuda con id " + deudaId));
         var padron = deuda.getPadron();
-        String ruta = padron.getOrigen() == OrigenDatos.SUCIVE ? "/api/v1/utec/sucive/facturas" : "/api/v1/utec/facturas";
+        return consultarPorCm(padron.getOrigen(), padron.getCm(), estado, vencida, incluirConvenios);
+    }
+
+    public FacturasPadronResponse consultarPorCm(OrigenDatos origen, String cm,
+            String estado, Boolean vencida, boolean incluirConvenios) {
+        String ruta = origen == OrigenDatos.SUCIVE ? "/api/v1/utec/sucive/facturas" : "/api/v1/utec/facturas";
         try {
             var respuesta = intendenciaRestClient.get().uri(uri -> {
-                uri.path(ruta).queryParam("cm", padron.getCm()).queryParam("incluir_convenios", incluirConvenios ? 1 : 0);
+                uri.path(ruta).queryParam("cm", cm).queryParam("incluir_convenios", incluirConvenios ? 1 : 0);
                 if (estado != null && !estado.isBlank()) uri.queryParam("estado", estado);
                 if (vencida != null) uri.queryParam("vencida", vencida ? 1 : 0);
                 return uri.build();

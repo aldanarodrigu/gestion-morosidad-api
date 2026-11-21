@@ -2,15 +2,14 @@ package com.intendencia.gestion_morosidad_api.modules.deuda.service;
 
 import com.intendencia.gestion_morosidad_api.modules.deuda.dto.*;
 import com.intendencia.gestion_morosidad_api.shared.enums.OrigenDatos;
+import com.intendencia.gestion_morosidad_api.shared.exportacion.Csv;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
 import java.util.List;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-import java.util.regex.Pattern;
 import lombok.RequiredArgsConstructor;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.ss.util.CellRangeAddress;
@@ -26,10 +25,9 @@ public class CarteraExportacionService {
     private final DeudaService deudaService;
     private final CarteraAgrupadaService agrupadaService;
     private static final int LOTE = 500;
-    private static final Pattern FORMULA_CSV = Pattern.compile("^[\\s\\p{Z}\\p{Cc}]*[=+@-]");
     private static final String[] COLUMNAS = {"CM", "N.º padrón", "Contribuyente", "Documento",
             "Origen", "PadTipo", "Tributo", "Segmento", "Días vencido", "Deuda", "Gestiones",
-            "Acción sugerida", "Convenio", "Contacto", "Matrícula", "Facturas vencidas consideradas", "Facturas con importe positivo", "Año desde", "Año hasta", "Cantidad de años con deuda", "Años con deuda"};
+            "Convenio", "Contacto", "Matrícula", "Facturas vencidas consideradas", "Facturas con importe positivo", "Año desde", "Año hasta", "Cantidad de años con deuda", "Años con deuda"};
 
     // Todas las páginas se consultan sobre la misma instantánea de la base local.
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
@@ -104,7 +102,7 @@ public class CarteraExportacionService {
         try (var salida = new ByteArrayOutputStream();
              var escritor = new OutputStreamWriter(salida, StandardCharsets.UTF_8)) {
             escritor.write('\uFEFF');
-            escritor.write(lineaCsv((Object[]) COLUMNAS));
+            escritor.write(Csv.linea((Object[]) COLUMNAS));
             Sort estable = orden.isSorted() ? orden : Sort.by("deudaDesde");
             if (!agrupar && estable.getOrderFor("id") == null) estable = estable.and(Sort.by("id"));
             int pagina = 0;
@@ -122,19 +120,11 @@ public class CarteraExportacionService {
                     totalPaginas = datos.totalPaginas();
                     deudas = datos.contenido();
                 }
-                for (var deuda : deudas) escritor.write(lineaCsv(datosFila(deuda)));
+                for (var deuda : deudas) escritor.write(Csv.linea(datosFila(deuda)));
             } while (pagina < totalPaginas);
             escritor.flush();
             return salida.toByteArray();
         }
-    }
-
-    private static String lineaCsv(Object... valores) {
-        return Arrays.stream(valores).map(valor -> {
-            String texto = valor == null ? "" : valor.toString();
-            if (valor instanceof String && FORMULA_CSV.matcher(texto).find()) texto = "'" + texto;
-            return "\"" + texto.replace("\"", "\"\"") + "\"";
-        }).collect(Collectors.joining(";", "", "\r\n"));
     }
 
     private static void escribir(Row fila, DeudaResponse d, CellStyle dinero) {
@@ -148,7 +138,7 @@ public class CarteraExportacionService {
                 d.padron().tipoPadron(), unir(d.tributos(), t -> t.descripcion() == null || t.descripcion().isBlank() ? t.codigo() : t.descripcion()),
                 d.segmentoMora() == null ? "Sin segmento" : d.segmentoMora().nombre(),
                 d.diasAtraso() == null ? 0L : d.diasAtraso(), d.importe(), d.cantidadGestiones(),
-                unir(d.accionesSugeridas(), a -> a.nombre()), d.convenio() ? "Sí" : "No",
+                d.convenio() ? "Sí" : "No",
                 d.conContacto() ? "Con datos" : "Sin datos", d.padron().matricula(),
                 d.cantidadFacturasVencidas(), d.cantidadFacturasConDeuda(), d.anioDesde(),
                 d.anioHasta(), d.cantidadAniosDeuda(), d.aniosDeuda()};

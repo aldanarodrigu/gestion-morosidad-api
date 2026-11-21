@@ -7,6 +7,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.intendencia.gestion_morosidad_api.modules.cancelacion.CancelacionRepository;
 import com.intendencia.gestion_morosidad_api.integration.intendencia.geopagos.dto.GeoPagosFacturaCanceladaDto;
 import com.intendencia.gestion_morosidad_api.integration.intendencia.geopagos.dto.GeoPagosContribuyenteDto;
 import com.intendencia.gestion_morosidad_api.integration.intendencia.geopagos.dto.GeoPagosFacturaPendienteDto;
@@ -54,11 +55,13 @@ class SincronizacionDeudasProcessorTest {
     @Mock private ConfiguracionSegmentoService configuracionSegmentoService;
     private SincronizacionDeudasProcessor processor;
 
+    @Mock CancelacionRepository cancelaciones;
+
     @BeforeEach void prepararReloj() {
         processor = new SincronizacionDeudasProcessor(deudaRepository, padronRepository,
                 contribuyenteRepository, sincronizacionContactosService, tributoRepository,
                 configuracionSegmentoService,
-                Clock.fixed(Instant.parse("2026-09-24T15:00:00Z"), ZoneId.of("America/Montevideo")));
+                cancelaciones, Clock.fixed(Instant.parse("2026-09-24T15:00:00Z"), ZoneId.of("America/Montevideo")));
     }
 
     static java.util.stream.Stream<org.junit.jupiter.params.provider.Arguments> padronesIncompletos() {

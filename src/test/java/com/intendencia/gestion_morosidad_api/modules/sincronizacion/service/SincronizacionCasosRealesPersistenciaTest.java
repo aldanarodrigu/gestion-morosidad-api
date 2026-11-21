@@ -4,12 +4,18 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 import com.intendencia.gestion_morosidad_api.integration.intendencia.common.IntendenciaApiResponse;
 import com.intendencia.gestion_morosidad_api.integration.intendencia.geopagos.client.GeoPagosClient;
 import com.intendencia.gestion_morosidad_api.integration.intendencia.geopagos.dto.GeoPagosContribuyenteDto;
 import com.intendencia.gestion_morosidad_api.integration.intendencia.geopagos.dto.GeoPagosFacturaCanceladaDto;
 import com.intendencia.gestion_morosidad_api.integration.intendencia.geopagos.dto.GeoPagosFacturaPendienteDto;
+import com.intendencia.gestion_morosidad_api.modules.cancelacion.Cancelacion;
+import com.intendencia.gestion_morosidad_api.modules.cancelacion.CancelacionRepository;
+import com.intendencia.gestion_morosidad_api.modules.cancelacion.FiltroCancelaciones;
 import com.intendencia.gestion_morosidad_api.modules.contacto.service.SincronizacionContactosService;
 import com.intendencia.gestion_morosidad_api.modules.deuda.entity.Deuda;
 import com.intendencia.gestion_morosidad_api.modules.deuda.entity.EstadoDeuda;
@@ -19,24 +25,32 @@ import com.intendencia.gestion_morosidad_api.modules.tributo.entity.Tributo;
 import com.intendencia.gestion_morosidad_api.shared.enums.OrigenDatos;
 import com.intendencia.gestion_morosidad_api.shared.exception.IntegracionExternaException;
 import jakarta.persistence.EntityManager;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.List;
+import org.apache.poi.ss.usermodel.CellType;
+import org.apache.poi.ss.usermodel.WorkbookFactory;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.convention.TestBean;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.json.JsonMapper;
@@ -57,6 +71,7 @@ import tools.jackson.databind.json.JsonMapper;
 @EnabledIfEnvironmentVariable(named = "SINCRONIZACION_TEST_DB_URL", matches = ".+")
 @SpringBootTest(properties = {"sincronizacion.automatica.habilitada=false", "geopagos.username=test"})
 @Transactional
+@AutoConfigureMockMvc
 class SincronizacionCasosRealesPersistenciaTest {
 
     static final ZoneId URUGUAY = ZoneId.of("America/Montevideo");
@@ -70,7 +85,9 @@ class SincronizacionCasosRealesPersistenciaTest {
 
     @DynamicPropertySource
     static void database(DynamicPropertyRegistry r) {
-        r.add("spring.datasource.url", () -> System.getenv("SINCRONIZACION_TEST_DB_URL"));
+        String url = System.getenv("SINCRONIZACION_TEST_DB_URL");
+        // Reproduce la configuración de lotes usada en la aplicación.
+        r.add("spring.datasource.url", () -> url + (url.contains("?") ? "&" : "?") + "reWriteBatchedInserts=true");
         r.add("spring.datasource.username", () -> "morosidad");
         r.add("spring.datasource.password", () -> "morosidad-local");
     }
@@ -85,6 +102,8 @@ class SincronizacionCasosRealesPersistenciaTest {
     @Autowired SincronizacionDeudasService service;
     @Autowired DeudaRepository deudas;
     @Autowired JdbcTemplate jdbc;
+    @Autowired CancelacionRepository cancelaciones;
+    @Autowired MockMvc mvc;
     @Autowired EntityManager em;
     @MockitoBean GeoPagosClient geoPagosClient;
 
@@ -397,6 +416,138 @@ class SincronizacionCasosRealesPersistenciaTest {
     }
 
     // ================================================================ Utilidades
+
+    @Test
+    void guardaLasCancelacionesSinDuplicarNiCambiarElEstadoPorUnCobro() {
+        dia1();
+        dia2();
+        dia2();
+        var pagina = org.springframework.data.domain.PageRequest.of(0, 20);
+        var cobrosDelCm = cancelaciones.listar(new FiltroCancelaciones(OrigenDatos.INTENDENCIA, null, DIA_2, "100203", null), pagina);
+        assertThat(cobrosDelCm.contenido()).extracting(Cancelacion::numeroCobro)
+                .containsExactly("5501234", "5409876");
+        assertThat(cobrosDelCm.totalElementos()).isEqualTo(2);
+        var anulados = cancelaciones.listar(new FiltroCancelaciones(null, DIA_1, DIA_2, "100201", "anulado por error"), pagina);
+        assertThat(anulados.contenido()).singleElement()
+                .satisfies(c -> assertThat(cancelaciones.buscar(c.id())).contains(c));
+        assertThat(count("SELECT count(*) FROM cancelaciones WHERE cm = '555555'")).isZero();
+        assertThat(deudas.findAll().stream().filter(d -> d.getPadron().getCm().equals("100201")))
+                .singleElement().satisfies(d -> assertThat(d.getEstado()).isNotEqualTo(EstadoDeuda.CANCELADA));
+
+        var cobro = new GeoPagosFacturaCanceladaDto("100203", "8899", null, null,
+                "5501234", DIA_1, java.math.BigDecimal.TEN, "PAGO");
+        processor.procesar(List.of(), List.of(cobro), List.of(), DIA_2, DIA_2.atStartOfDay(), OrigenDatos.SUCIVE);
+        var cobrosAmbosOrigenes = cancelaciones.listar(new FiltroCancelaciones(null, DIA_1, DIA_2, "5501234", null), pagina);
+        assertThat(cobrosAmbosOrigenes.contenido()).extracting(Cancelacion::origen)
+                .containsExactlyInAnyOrder(OrigenDatos.INTENDENCIA, OrigenDatos.SUCIVE);
+    }
+
+    @Test
+    void guardaUnCobroPorCmAunqueLaApiRepitaSusFilasEnElMismoLote() {
+        var importe = new java.math.BigDecimal("425.75");
+        var sinTitular = new GeoPagosFacturaCanceladaDto("100203", "8899", null, null,
+                "001234", DIA_1, importe, "PAGO");
+        var titularB = new GeoPagosFacturaCanceladaDto("100203", "8899", "Titular B", "002",
+                "001234", DIA_1, importe, "PAGO");
+        var titularA = new GeoPagosFacturaCanceladaDto("100203", "8899", "Titular A", "001",
+                "001234", DIA_1, importe, "PAGO");
+        var otroCm = new GeoPagosFacturaCanceladaDto("100204", "8900", "Otro titular", "003",
+                "001234", DIA_1, importe, "PAGO");
+        var pagina = org.springframework.data.domain.PageRequest.of(0, 20);
+
+        processor.procesar(List.of(), List.of(sinTitular, titularB, titularA, otroCm), List.of(),
+                DIA_1, DIA_1.atStartOfDay(), OrigenDatos.INTENDENCIA);
+        var primero = cancelaciones.listar(new FiltroCancelaciones(OrigenDatos.INTENDENCIA, null, null, "100203", null), pagina);
+        assertThat(primero.contenido()).singleElement().satisfies(c -> {
+            assertThat(c.numeroCobro()).isEqualTo("001234");
+            assertThat(c.importeTotal()).isEqualByComparingTo(importe);
+            assertThat(c.persona()).isEqualTo("Titular A");
+            assertThat(c.documento()).isEqualTo("001");
+        });
+
+        processor.procesar(List.of(), List.of(otroCm, titularA, titularB, sinTitular), List.of(),
+                DIA_2, DIA_2.atStartOfDay(), OrigenDatos.INTENDENCIA);
+        assertThat(cancelaciones.listar(new FiltroCancelaciones(OrigenDatos.INTENDENCIA, null, null, "100203", null), pagina))
+                .isEqualTo(primero);
+        assertThat(cancelaciones.listar(new FiltroCancelaciones(OrigenDatos.INTENDENCIA, null, null, "001234", null), pagina).contenido())
+                .extracting(Cancelacion::cm).containsExactlyInAnyOrder("100203", "100204");
+    }
+
+    @Test
+    void exportaAmbosFormatosConLosFiltrosDeLaListaYElRolAnalista() throws Exception {
+        var filas = new ArrayList<Cancelacion>();
+        for (int i = 1; i <= 23; i++) {
+            filas.add(new Cancelacion(null, OrigenDatos.SUCIVE, "00" + i, "000" + i, "001",
+                    "=Titular", "0002", DIA_1, new BigDecimal("45.50"), "PAGO", DIA_1.atStartOfDay()));
+        }
+        filas.add(new Cancelacion(null, OrigenDatos.INTENDENCIA, "001", "0001", "001",
+                "=Titular", "0002", DIA_1, BigDecimal.TEN, "PAGO", DIA_1.atStartOfDay()));
+        filas.add(new Cancelacion(null, OrigenDatos.SUCIVE, "001", "fuera-motivo", "001",
+                "=Titular", "0002", DIA_1, BigDecimal.TEN, "ANULADO", DIA_1.atStartOfDay()));
+        filas.add(new Cancelacion(null, OrigenDatos.SUCIVE, "001", "fuera-fecha", "001",
+                "=Titular", "0002", DIA_2, BigDecimal.TEN, "PAGO", DIA_2.atStartOfDay()));
+        filas.add(new Cancelacion(null, OrigenDatos.SUCIVE, "001", "fuera-documento", "001",
+                "Otra persona", "0003", DIA_1, BigDecimal.TEN, "PAGO", DIA_1.atStartOfDay()));
+        cancelaciones.guardar(filas);
+
+        var analista = user("usuario").roles("ANALISTA");
+        mvc.perform(get("/api/cancelaciones").with(analista)
+                        .param("origen", "SUCIVE").param("motivo", "pago").param("buscar", "0002")
+                        .param("desde", DIA_1.toString()).param("hasta", DIA_1.toString()))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.totalElementos").value(23))
+                .andExpect(jsonPath("$.contenido.length()").value(20));
+
+        byte[] csv = mvc.perform(get("/api/cancelaciones/exportar").with(analista)
+                        .param("origen", "SUCIVE").param("motivo", "pago").param("buscar", "0002")
+                        .param("desde", DIA_1.toString()).param("hasta", DIA_1.toString())
+                        .param("page", "1").param("size", "1").param("formato", "CSV"))
+                .andExpect(status().isOk()).andExpect(content().contentType("text/csv;charset=UTF-8"))
+                .andExpect(header().string("Content-Disposition", "attachment; filename=cancelaciones.csv"))
+                .andReturn().getResponse().getContentAsByteArray();
+        String csvTexto = new String(csv, StandardCharsets.UTF_8);
+        assertThat(csvTexto.lines()).hasSize(24);
+        assertThat(csvTexto).startsWith("\uFEFF\"CM\"").contains("'=Titular", "45.50")
+                .doesNotContain("Intendencia", "ANULADO", "fuera-fecha", "fuera-documento");
+
+        byte[] excel = mvc.perform(get("/api/cancelaciones/exportar").with(analista)
+                        .param("origen", "SUCIVE").param("motivo", "pago").param("buscar", "0002")
+                        .param("desde", DIA_1.toString()).param("hasta", DIA_1.toString()))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Disposition", "attachment; filename=cancelaciones.xlsx"))
+                .andReturn().getResponse().getContentAsByteArray();
+        try (var libro = WorkbookFactory.create(new ByteArrayInputStream(excel))) {
+            var hoja = libro.getSheetAt(0);
+            assertThat(hoja.getLastRowNum()).isEqualTo(23);
+            var fila = hoja.getRow(1);
+            assertThat(fila.getCell(0).getStringCellValue()).isEqualTo("0023");
+            assertThat(fila.getCell(3).getCellType()).isEqualTo(CellType.STRING);
+            assertThat(fila.getCell(4).getStringCellValue()).isEqualTo("0002");
+            assertThat(fila.getCell(8).getNumericCellValue()).isEqualTo(45.50);
+        }
+        for (String rol : List.of("ADMINISTRADOR", "NOTIFICADOR")) {
+            mvc.perform(get("/api/cancelaciones/exportar").with(user("usuario").roles(rol)))
+                    .andExpect(status().isForbidden());
+        }
+        mvc.perform(get("/api/cancelaciones/exportar").with(analista).param("desde", DIA_2.toString())
+                        .param("hasta", DIA_1.toString()))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void devuelveSoloMotivosPresentesSinRepeticionesParaElPanelDeExportacion() throws Exception {
+        var motivos = java.util.Arrays.asList("PAGO", "pago", "ANULADO", "", null);
+        var registros = new ArrayList<Cancelacion>();
+        for (int i = 0; i < motivos.size(); i++) {
+            registros.add(new Cancelacion(null, OrigenDatos.INTENDENCIA, "1", "C" + i,
+                    null, null, null, DIA_1, BigDecimal.ONE, motivos.get(i), DIA_1.atStartOfDay()));
+        }
+        cancelaciones.guardar(registros);
+        mvc.perform(get("/api/cancelaciones/motivos").with(user("analista").roles("ANALISTA")))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[0]").value("ANULADO")).andExpect(jsonPath("$[1]").value("PAGO"));
+        mvc.perform(get("/api/cancelaciones/motivos").with(user("notificador").roles("NOTIFICADOR")))
+                .andExpect(status().isForbidden());
+    }
 
     ResultadoSincronizacion dia1() {
         return procesar(pendientes("pendientes-dia1.json"), List.of(), contribuyentes(), DIA_1);
