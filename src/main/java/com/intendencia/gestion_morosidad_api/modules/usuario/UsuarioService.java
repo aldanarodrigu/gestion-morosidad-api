@@ -1,5 +1,6 @@
 package com.intendencia.gestion_morosidad_api.modules.usuario;
 
+import com.intendencia.gestion_morosidad_api.modules.auth.PoliticaPassword;
 import com.intendencia.gestion_morosidad_api.modules.usuario.dto.UsuarioRequest;
 import com.intendencia.gestion_morosidad_api.modules.usuario.dto.UsuarioResponse;
 import com.intendencia.gestion_morosidad_api.modules.usuario.dto.UsuarioUpdateRequest;
@@ -49,6 +50,7 @@ public class UsuarioService {
             throw new RecursoYaExisteException("El usuario '" + usuarioRequest.username().trim() + "' ya existe");
         }
 
+        PoliticaPassword.validarLimiteBcrypt(usuarioRequest.password());
         Usuario usuario = new Usuario();
 
         usuario.setUsername(usuarioRequest.username().trim());

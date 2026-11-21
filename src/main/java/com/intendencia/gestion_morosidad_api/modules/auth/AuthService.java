@@ -4,9 +4,11 @@ import com.intendencia.gestion_morosidad_api.modules.auth.dto.LoginRequest;
 import com.intendencia.gestion_morosidad_api.modules.auth.dto.LoginResponse;
 import com.intendencia.gestion_morosidad_api.modules.usuario.Usuario;
 import com.intendencia.gestion_morosidad_api.modules.usuario.UsuarioRepository;
-import com.intendencia.gestion_morosidad_api.shared.exception.RecursoNoEncontradoException;
 import lombok.RequiredArgsConstructor;
+import java.time.Instant;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.CredentialsExpiredException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.stereotype.Service;
 
@@ -19,13 +21,20 @@ public class AuthService {
     private final TokenService tokenService;
 
     public LoginResponse login(LoginRequest request) {
+        if (PoliticaPassword.superaLimiteBcrypt(request.password())) {
+            throw new BadCredentialsException("Credenciales inválidas");
+        }
+        // Una autenticación que coincide con un cambio de clave solo puede emitir la versión anterior.
+        var cuenta = usuarioRepository.findByUsername(request.username());
         authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(request.username(), request.password()));
 
-        Usuario usuario = usuarioRepository.findByUsername(request.username())
-                .orElseThrow(() -> new RecursoNoEncontradoException("Usuario no encontrado"));
-
+        Usuario usuario = cuenta.orElseThrow(() -> new BadCredentialsException("Credenciales inválidas"));
+        if (usuario.passwordTemporalVencida(Instant.now())) {
+            throw new CredentialsExpiredException("La contraseña temporal venció");
+        }
         String token = tokenService.generateToken(usuario);
-        return new LoginResponse(token, usuario.getId(), usuario.getUsername(), java.util.Set.copyOf(usuario.getRoles()));
+        return new LoginResponse(token, usuario.getId(), usuario.getUsername(),
+                java.util.Set.copyOf(usuario.getRoles()), usuario.requiereCambioPassword());
     }
 }

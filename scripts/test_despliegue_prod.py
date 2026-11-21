@@ -36,6 +36,7 @@ class Entorno:
         self.valores = {
             "DB_NAME": "morosidad_qa", "DB_USER": "morosidad", "DB_PASSWORD": secrets.token_hex(24),
             "JWT_SECRET": base64.b64encode(secrets.token_bytes(32)).decode(),
+            "ADMIN_BOOTSTRAP_PASSWORD": secrets.token_urlsafe(24),
             "DB_HOST_PORT": str(db), "API_HOST_PORT": str(api), "FRONT_HOST_PORT": str(front),
             "SINCRONIZACION_AUTOMATICA": "false", "UTEC_API_USERNAME": "", "UTEC_API_PASSWORD": "",
             "UTEC_API_PAGE_SIZE": "1000", "SINCRONIZACION_CRON": "0 0 3 * * *",
@@ -100,7 +101,7 @@ class Entorno:
             time.sleep(2)
         else:
             raise RuntimeError("El despliegue aislado no quedó saludable en 180 segundos")
-        status, _, body = self.request("/api/auth/login", front=True, datos={"username": "admin", "password": "admin123"})
+        status, _, body = self.request("/api/auth/login", front=True, datos={"username": "admin", "password": self.valores["ADMIN_BOOTSTRAP_PASSWORD"]})
         if status != 200:
             raise RuntimeError("No se pudo iniciar sesión en la base nueva de QA; HTTP " + str(status))
         self.token = json.loads(body)["token"]

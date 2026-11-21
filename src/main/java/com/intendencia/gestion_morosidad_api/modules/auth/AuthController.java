@@ -3,7 +3,7 @@ package com.intendencia.gestion_morosidad_api.modules.auth;
 import com.intendencia.gestion_morosidad_api.modules.auth.dto.LoginRequest;
 import com.intendencia.gestion_morosidad_api.modules.auth.dto.LoginResponse;
 import com.intendencia.gestion_morosidad_api.modules.usuario.UsuarioRepository;
-import com.intendencia.gestion_morosidad_api.modules.usuario.dto.UsuarioResponse;
+import com.intendencia.gestion_morosidad_api.modules.usuario.Rol;
 import com.intendencia.gestion_morosidad_api.shared.exception.RecursoNoEncontradoException;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -22,12 +22,15 @@ public class AuthController {
 
     @GetMapping("/me")
     @PreAuthorize("isAuthenticated()")
-    public UsuarioResponse sesion(Principal principal) {
+    public SesionResponse sesion(Principal principal) {
         var usuario = usuarios.findByUsername(principal.getName())
                 .orElseThrow(() -> new RecursoNoEncontradoException("Usuario no encontrado"));
-        return new UsuarioResponse(usuario.getId(), usuario.getUsername(),
-                Set.copyOf(usuario.getRoles()), usuario.getActivo());
+        return new SesionResponse(usuario.getId(), usuario.getUsername(),
+                Set.copyOf(usuario.getRoles()), usuario.getActivo(), usuario.requiereCambioPassword());
     }
+
+    public record SesionResponse(Long id, String username, Set<Rol> roles, Boolean activo,
+            boolean requiereCambioPassword) {}
 
     @PostMapping("/login")
     public ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest loginRequest) {

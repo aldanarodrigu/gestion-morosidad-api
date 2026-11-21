@@ -19,10 +19,13 @@ import org.springframework.security.oauth2.server.resource.authentication.JwtAut
 
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
+import java.time.Instant;
 import java.util.Base64;
+import java.util.List;
 
 @Configuration
 public class JwtConfig {
+    static final String CAMBIO_PASSWORD_REQUERIDO = "CAMBIO_PASSWORD_REQUERIDO";
 
     @Bean
     public SecretKey jwtSecretKey(@Value("${jwt.secret}") String secret) {
@@ -53,6 +56,15 @@ public class JwtConfig {
                     .orElseThrow(() -> new OAuth2AuthenticationException(
                             new OAuth2Error("invalid_token"),
                             "Usuario inactivo o inexistente"));
+            // Los tokens anteriores a la migración tienen implícitamente la versión inicial.
+            Object version = jwt.getClaims().getOrDefault("credencial", 0L);
+            if (!(version instanceof Number numero) || numero.longValue() != usuario.getVersionCredencial()
+                    || usuario.passwordTemporalVencida(Instant.now())) {
+                throw new OAuth2AuthenticationException(new OAuth2Error("invalid_token"), "Credencial no vigente");
+            }
+            if (usuario.requiereCambioPassword()) {
+                return List.of(new SimpleGrantedAuthority(CAMBIO_PASSWORD_REQUERIDO));
+            }
             return usuario.getRoles().stream()
                     .map(rol -> (GrantedAuthority)
                             new SimpleGrantedAuthority("ROLE_" + rol.name()))

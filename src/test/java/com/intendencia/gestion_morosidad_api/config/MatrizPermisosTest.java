@@ -2,6 +2,9 @@ package com.intendencia.gestion_morosidad_api.config;
 
 import com.intendencia.gestion_morosidad_api.modules.accion.AccionService;
 import com.intendencia.gestion_morosidad_api.modules.auth.AuthService;
+import com.intendencia.gestion_morosidad_api.modules.auth.PasswordService;
+import com.intendencia.gestion_morosidad_api.modules.cancelacion.CancelacionRepository;
+import com.intendencia.gestion_morosidad_api.modules.cancelacion.CancelacionExportacionService;
 import com.intendencia.gestion_morosidad_api.modules.captura.CapturaService;
 import com.intendencia.gestion_morosidad_api.modules.contacto.service.ContactoService;
 import com.intendencia.gestion_morosidad_api.modules.contribuyente.service.ContribuyenteService;
@@ -67,6 +70,9 @@ class MatrizPermisosTest {
     @Autowired @Qualifier("requestMappingHandlerMapping") RequestMappingHandlerMapping mapeos;
 
     @MockitoBean AuthService auth;
+    @MockitoBean PasswordService passwords;
+    @MockitoBean CancelacionRepository cancelaciones;
+    @MockitoBean CancelacionExportacionService exportacionCancelaciones;
     @MockitoBean UsuarioRepository usuarioRepository;
     @MockitoBean UsuarioService usuarios;
     @MockitoBean DeudaService deudas;
@@ -120,6 +126,13 @@ class MatrizPermisosTest {
             new Endpoint("POST", "/api/auth/login", PUBLICO, """
                     {"username":"usuario","password":"clave-segura"}"""),
             new Endpoint("GET", "/api/auth/me", TODOS),
+            new Endpoint("PUT", "/api/auth/me/password", TODOS,
+                    "{\"passwordActual\":\"clave-anterior\",\"passwordNueva\":\"clave-nueva-de-prueba\"}"),
+            new Endpoint("POST", "/api/usuarios/{id}/password/reset", ADMIN),
+            new Endpoint("GET", "/api/cancelaciones", TODOS),
+            new Endpoint("GET", "/api/cancelaciones/{id}/facturas", TODOS),
+            new Endpoint("GET", "/api/cancelaciones/motivos", EnumSet.of(Rol.ANALISTA)),
+            new Endpoint("GET", "/api/cancelaciones/exportar", EnumSet.of(Rol.ANALISTA)),
             // Cartera
             new Endpoint("GET", "/api/deudas", TODOS),
             new Endpoint("GET", "/api/deudas/tipos-padron", TODOS),

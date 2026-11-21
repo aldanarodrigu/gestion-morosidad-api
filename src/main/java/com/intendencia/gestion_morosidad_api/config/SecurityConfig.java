@@ -3,6 +3,7 @@ package com.intendencia.gestion_morosidad_api.config;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.web.access.expression.WebExpressionAuthorizationManager;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -28,10 +29,13 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/auth/**").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/auth/me").authenticated()
+                        .requestMatchers(HttpMethod.PUT, "/api/auth/me/password").authenticated()
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                         .requestMatchers("/actuator/health").permitAll()
-                        .anyRequest().authenticated())
+                        .anyRequest().access(new WebExpressionAuthorizationManager(
+                                "isAuthenticated() and !hasAuthority('" + JwtConfig.CAMBIO_PASSWORD_REQUERIDO + "')")))
                 .oauth2ResourceServer(oauth2 -> oauth2
                         .bearerTokenResolver(bearerTokenResolver())
                         .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter)));

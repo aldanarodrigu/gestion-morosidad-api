@@ -7,6 +7,7 @@ public record LoginResponse(
         String token,
         Long id,
         String username,
-        Set<Rol> roles
+        Set<Rol> roles,
+        boolean requiereCambioPassword
 ) {
 }

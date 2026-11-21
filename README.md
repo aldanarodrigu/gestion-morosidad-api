@@ -17,6 +17,7 @@ valores reales a `.env.example`.
 | `DB_POOL_SIZE` | No | Conexiones por instancia (por defecto 3, ver [Supabase](#base-en-supabase)) |
 | `UTEC_API_USERNAME`, `UTEC_API_PASSWORD` | Para sincronizar | Credenciales de GeoPagos (las entrega la Intendencia) |
 | `JWT_SECRET` | Sí | Clave para firmar los tokens. **En Base64 y de al menos 32 bytes**; sin ella la API no arranca |
+| `ADMIN_BOOTSTRAP_PASSWORD` | En prod con base vacía | Contraseña del primer administrador. Al menos 15 caracteres y hasta 72 bytes en UTF-8 |
 | `JWT_EXPIRATION_SECONDS` | No | Duración del token en segundos (por defecto 3600 = 1 hora). Al vencer, el frontend vuelve al login |
 | `SINCRONIZACION_AUTOMATICA`, `SINCRONIZACION_CRON` | No | Sincronización diaria (ver más abajo) |
 | `DB_HOST_PORT`, `API_HOST_PORT`, `FRONT_HOST_PORT` | No | Puertos del `docker-compose` |
@@ -102,6 +103,26 @@ docker compose down               # apagar (los datos se conservan)
 docker compose down -v            # apagar y borrar la base
 ```
 
+## Cambio y restablecimiento de contraseña
+
+El menú de la cuenta permite cambiar la contraseña desde cualquier rol. La API identifica al usuario
+a partir del token y exige la contraseña actual.
+
+- `PUT /api/auth/me/password` recibe `passwordActual` y `passwordNueva`. Devuelve 204 y
+  revoca los tokens anteriores de esa cuenta. La contraseña nueva admite al menos 15 caracteres
+  y hasta 72 bytes en UTF-8. Luego se vuelve a iniciar sesión.
+- `POST /api/usuarios/{id}/password/reset` requiere Administrador y solo permite operar sobre
+  otra cuenta. Revoca sus tokens y entrega una contraseña temporal que vence en 24 horas.
+  Tras ingresar con esa clave, solo quedan habilitadas la consulta de sesión y el cambio de contraseña.
+  El reset conserva los roles y el estado activo de la cuenta.
+
+En **Configuración → Usuarios**, la contraseña temporal aparece una vez para entregarla por un
+canal seguro. El servidor guarda su hash y los logs identifican las operaciones por ID de usuario.
+
+Para el primer arranque con el perfil `prod` y una base vacía, definí `ADMIN_BOOTSTRAP_PASSWORD`.
+Después de crear la cuenta inicial, podés retirar la variable. Si reutilizás una base donde la cuenta
+local conserva su contraseña de prueba, cambiala antes de exponer el sistema.
+
 ## Sincronización con GeoPagos
 
 Las consultas de la API (deudas, contribuyentes, padrones) **solo leen la base propia**: nunca
@@ -110,14 +131,15 @@ memoria y lo guarda en **una sola transacción** (si algo falla no queda nada a 
 
 ### Cómo ejecutarla
 
-Manual, con un usuario Administrador (por defecto `admin` / `admin123`, cambiarla antes de usar
-datos reales). Ese usuario se crea solo al arrancar con la tabla de usuarios vacía; si después se
-renombra o se cambia su contraseña, no se vuelve a crear:
+Usá un usuario con rol Administrador. En desarrollo, `admin` / `admin123` es la cuenta local
+de prueba que se crea si la tabla de usuarios está vacía y no se configuró una clave inicial.
+En producción usá la contraseña configurada o la de tu cuenta existente:
 
 ```powershell
 $api = "http://127.0.0.1:9080" # Docker; si se ejecuta Java directamente, usar su puerto configurado.
+$cred = Get-Credential -UserName "admin" -Message "Credenciales de Gestión de Morosidad"
 $login = Invoke-RestMethod -Method Post -Uri "$api/api/auth/login" -ContentType "application/json" `
-  -Body '{"username":"admin","password":"admin123"}'
+  -Body (@{ username = $cred.UserName; password = $cred.GetNetworkCredential().Password } | ConvertTo-Json -Compress)
 Invoke-RestMethod -Method Post -Uri "$api/api/sincronizaciones/deudas?origen=INTENDENCIA" `
   -Headers @{ Authorization = "Bearer $($login.token)" } -TimeoutSec 3600
 # Para GeoPat: reemplazar INTENDENCIA por SUCIVE.

@@ -58,6 +58,18 @@ class FlywayMigracionesTest {
         assertThat(numero("SELECT count(*) FROM segmentos_mora")).isEqualTo(3);
         assertThat(numero("SELECT count(*) FROM configuraciones_segmento WHERE activa AND tributo_id IS NULL AND tipo_padron IS NULL")).isEqualTo(3);
     }
+    @Test void credencialesExistentesConservanSuHashYEmpiezanConSesionNormal() {
+        flyway("202611201900").migrate();
+        semilla();
+        var antes = jdbc.queryForMap("SELECT username, password, activo FROM usuarios WHERE id=?", ID);
+
+        flyway(null).migrate();
+
+        assertThat(jdbc.queryForMap("SELECT username, password, activo FROM usuarios WHERE id=?", ID)).isEqualTo(antes);
+        assertThat(numero("SELECT version_credencial FROM usuarios WHERE id=?", ID)).isZero();
+        assertThat(numero("SELECT count(*) FROM usuarios WHERE id=? AND password_temporal_hasta IS NULL", ID)).isEqualTo(1);
+    }
+
     @Test void segundoArranqueNoReaplicaMigracionesNiDuplicaDatos() {
         var f=flyway(null);f.migrate();semilla();var antes=filas();long aplicadas=numero("SELECT count(*) FROM flyway_schema_history");
         assertThat(flyway(null).migrate().migrationsExecuted).isZero();
@@ -65,7 +77,7 @@ class FlywayMigracionesTest {
         assertThat(flyway(null).validateWithResult().validationSuccessful).isTrue();
     }
     @ParameterizedTest
-    @ValueSource(strings={"202610071300","202610121930","202610131200","202611121000","202611161000"})
+    @ValueSource(strings={"202610071300","202610121930","202610131200","202611121000","202611161000","202611201900"})
     void actualizaVersionAnteriorConDatosSinPerderIdentidadesNiRelaciones(String version) {
         flyway(version).migrate();semilla();var antes=filas();
         assertThat(flyway(null).migrate().migrationsExecuted).isPositive();
