@@ -72,8 +72,7 @@ class UsuarioPersistenciaTest {
                 .andExpect(jsonPath("$.requiereCambioPassword").value(true))
                 .andExpect(jsonPath("$.roles", hasItems("NOTIFICADOR", "ADMINISTRADOR"))).andReturn();
         String token = JsonPath.read(login.getResponse().getContentAsString(), "$.token");
-        assertThat(decoder.decode(token).getClaimAsStringList("roles"))
-                .containsExactlyInAnyOrder("NOTIFICADOR", "ADMINISTRADOR");
+        assertThat(decoder.decode(token).hasClaim("roles")).isFalse();
         mvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.roles.length()").value(2));
     }

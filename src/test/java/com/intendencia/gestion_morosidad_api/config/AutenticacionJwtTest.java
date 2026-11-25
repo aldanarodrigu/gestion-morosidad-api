@@ -100,7 +100,7 @@ class AutenticacionJwtTest {
         var jwt = decoder.decode(token);
 
         assertThat(Duration.between(jwt.getIssuedAt(), jwt.getExpiresAt())).isEqualTo(Duration.ofSeconds(3600));
-        assertThat(jwt.getClaimAsStringList("roles")).containsExactly("ADMINISTRADOR", "NOTIFICADOR");
+        assertThat(jwt.hasClaim("roles")).as("los roles se leen de la base, no del token").isFalse();
         mvc.perform(get("/api/usuarios").header("Authorization", bearer(token))).andExpect(status().isOk());
     }
 

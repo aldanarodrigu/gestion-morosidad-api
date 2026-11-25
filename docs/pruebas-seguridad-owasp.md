@@ -12,8 +12,8 @@ Estados: **OK** = cumple y tiene test o evidencia en el código · **HALLAZGO** 
 | H2 | Media | **Corregido (25/11/2026).** Los usuarios que crea un administrador no cumplían la política de contraseñas: mínimo 8 caracteres en vez de 15 y sin cambio obligatorio en el primer ingreso. El administrador conocía la clave definitiva del usuario. | `UsuarioRequest`, `UsuarioService.saveUser` |
 | H3 | Media | **Corregido (25/11/2026).** Swagger UI y `/v3/api-docs` eran públicos también con el perfil `prod`: exponían el mapa completo de la API sin autenticación. | `SecurityConfig`, `application-prod.properties` |
 | H4 | Baja | **Corregido (25/11/2026).** El bloqueo de login era por cuenta: cualquiera podía bloquear la cuenta `admin` (u otra conocida) con 5 intentos fallidos. Tampoco había límite por IP, lo que permitía probar una misma clave contra muchas cuentas (password spraying). | `LimitadorLogin` |
-| H5 | Baja | Fuera de `prod`, el admin inicial se crea con `admin/admin123` y no se le exige cambiar la clave. Si una base de QA o demo con datos reales se levanta sin el perfil `prod`, queda con una credencial conocida. | `DataInitializer` |
-| H6 | Baja | Al cambiar los roles o desactivar un usuario no se incrementa `version_credencial`. Hoy no es explotable, porque los roles y `activo` se leen de la base en cada request, pero el claim `roles` del JWT queda desactualizado y no debe usarse para autorizar. | `UsuarioService.updateUser` |
+| H5 | Baja | **Corregido (25/11/2026).** Fuera de `prod`, el admin inicial se creaba con `admin/admin123` y no se le exigía cambiar la clave. Si una base de QA o demo con datos reales se levanta sin el perfil `prod`, queda con una credencial conocida. | `DataInitializer` |
+| H6 | Baja | **Corregido (25/11/2026).** Al cambiar los roles o desactivar un usuario no se incrementa `version_credencial`. Hoy no es explotable, porque los roles y `activo` se leen de la base en cada request, pero el claim `roles` del JWT queda desactualizado y no debe usarse para autorizar. | `UsuarioService.updateUser` |
 
 Corrección sugerida:
 
@@ -21,7 +21,8 @@ Corrección sugerida:
 - **H2 (corregido):** el alta aplica `PoliticaPassword.validarNueva` (15 caracteres, hasta 72 bytes) y deja la clave como temporal por 24 h, igual que el reset: al ingresar, el usuario solo puede cambiarla. Tests: `UsuarioServiceTest#elAltaDejaLaClaveComoTemporalYExigeCambiarlaAlIngresar`, `#claveQueNoCumpleLaPoliticaNoCreaElUsuario` y `UsuarioPersistenciaTest`.
 - **H3 (corregido):** `springdoc.api-docs.enabled=false` y `springdoc.swagger-ui.enabled=false` en `application-prod.properties`; en desarrollo siguen disponibles. Test: `DocumentacionApiPerfilTest` (200 sin perfil, 404 con `prod`).
 - **H4 (corregido):** `LimitadorLogin` lleva tres contadores: cuenta+IP (5), IP contra cualquier cuenta (20, no se reinicia con un login correcto) y cuenta desde todas las IP (50). Cinco fallos ya no bloquean la cuenta para otras direcciones; bloquearla en todas exige 50 fallos desde al menos 10 IP. La IP del cliente sale de `X-Real-IP` detrás de nginx (verificado con la API levantada). Tests: `PasswordPersistenciaTest` (bloqueo solo desde esa IP, 20 fallos por IP, 50 por cuenta).
-- **H5:** marcar la cuenta como temporal (`password_temporal_hasta`) también en dev.
+- **H5 (corregido):** fuera de `prod`, `admin/admin123` queda marcada para cambio obligatorio en el primer ingreso, sin vencimiento. Con `ADMIN_BOOTSTRAP_PASSWORD` no se fuerza el cambio. Test: `DataInitializerTest`.
+- **H6 (corregido):** el token ya no incluye el claim `roles`; los permisos se leen solo de la base. Tests: `AutenticacionJwtTest`, `UsuarioPersistenciaTest`.
 
 ## 1. OWASP API Security Top 10 (2023)
 
@@ -113,7 +114,7 @@ Datos tratados: documento, nombre, dirección y padrones del contribuyente; tel�
 - [x] **OK**: `JWT_SECRET` y `DB_PASSWORD` son obligatorios en Compose (`:?`) y `JWT_SECRET` no tiene default en `application.properties`.
 - [x] **OK**: `.env` está en `.gitignore`, `.env.example` no tiene valores reales y los contextos de build excluyen `.env*` y `.git`.
 - [x] **OK**: en la base, `DB_PASSWORD` tiene un default vacío, no una clave conocida.
-- [ ] **HALLAZGO H5** (`admin123` fuera de prod, sin cambio obligatorio).
+- [x] **OK (H5 corregido)**: la clave local `admin123` exige cambio en el primer ingreso.
 - [ ] **PENDIENTE**: revisar el historial de git en busca de secretos commiteados (`git log -p | grep -iE "password|secret|jwt"` o gitleaks).
 - [ ] **PENDIENTE**: en el despliegue real, confirmar que el perfil activo sea `prod` (el Dockerfile lo fija) y que nadie lo sobrescriba con `SPRING_PROFILES_ACTIVE`.
 - [ ] **PENDIENTE**: rotación. Hay que documentar cómo se rota `JWT_SECRET` (invalida todas las sesiones) y las credenciales de GeoPagos y de la base.

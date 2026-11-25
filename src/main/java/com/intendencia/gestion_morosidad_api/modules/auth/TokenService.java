@@ -26,11 +26,12 @@ public class TokenService {
     public String generateToken(Usuario usuario) {
         Instant now = Instant.now();
 
+        // Sin claim de roles: los permisos se leen de la base en cada request (JwtConfig), y un claim
+        // quedaría desactualizado al cambiar los roles o desactivar la cuenta.
         JwtClaimsSet claims = JwtClaimsSet.builder()
                 .subject(usuario.getUsername())
                 .claim(CLAIM_USUARIO_ID, usuario.getId())
                 .claim("credencial", usuario.getVersionCredencial())
-                .claim("roles", usuario.getRoles().stream().map(Enum::name).sorted().toList())
                 .issuedAt(now)
                 .expiresAt(now.plusSeconds(expirationSeconds))
                 .build();
