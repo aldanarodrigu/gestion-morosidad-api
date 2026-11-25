@@ -10,6 +10,7 @@ import com.intendencia.gestion_morosidad_api.shared.exception.ReglaNegocioExcept
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import java.time.Clock;
 import java.util.HashSet;
 
 import java.util.List;
@@ -20,13 +21,16 @@ public class UsuarioService {
 
     private final UsuarioRepository usuarioRepository;
     private final PasswordEncoder passwordEncoder;
+    private final Clock clock;
 
     public UsuarioService(
             UsuarioRepository usuarioRepository,
-            PasswordEncoder passwordEncoder) {
+            PasswordEncoder passwordEncoder,
+            Clock clock) {
 
         this.usuarioRepository = usuarioRepository;
         this.passwordEncoder = passwordEncoder;
+        this.clock = clock;
     }
 
     public List<UsuarioResponse> getAllUsers() {
@@ -50,7 +54,7 @@ public class UsuarioService {
             throw new RecursoYaExisteException("El usuario '" + usuarioRequest.username().trim() + "' ya existe");
         }
 
-        PoliticaPassword.validarLimiteBcrypt(usuarioRequest.password());
+        PoliticaPassword.validarNueva(usuarioRequest.password());
         Usuario usuario = new Usuario();
 
         usuario.setUsername(usuarioRequest.username().trim());
@@ -59,6 +63,8 @@ public class UsuarioService {
         );
         usuario.setRoles(new HashSet<>(usuarioRequest.roles()));
         usuario.setActivo(true);
+        // La clave la eligió el administrador: es temporal y el usuario debe cambiarla al ingresar.
+        usuario.setPasswordTemporalHasta(clock.instant().plus(PoliticaPassword.VIGENCIA_TEMPORAL));
 
         usuarioRepository.save(usuario);
 

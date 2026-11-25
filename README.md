@@ -413,8 +413,13 @@ Endpoints (requieren ADMINISTRADOR):
 Ejemplo de alta:
 
 ```json
-{"username":"operador","password":"clave-inicial","roles":["NOTIFICADOR","ADMINISTRADOR"]}
+{"username":"operador","password":"clave-inicial-segura","roles":["NOTIFICADOR","ADMINISTRADOR"]}
 ```
+
+La contraseña de alta sigue la misma política que el cambio de contraseña (al menos 15 caracteres
+y hasta 72 bytes en UTF-8; si no cumple, 400) y es temporal: vence en 24 horas y, al ingresar con ella,
+solo quedan habilitadas la consulta de sesión y el cambio de contraseña, igual que después de un reset.
+Así el administrador no conoce la contraseña definitiva del usuario.
 
 Para modificar una cuenta se envian `username`, `roles` y `activo`; la contrasena se
 conserva. Cada cuenta exige al menos un rol. La pantalla mantiene el nombre de usuario

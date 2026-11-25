@@ -55,7 +55,7 @@ class UsuarioPersistenciaTest {
         var respuesta = mvc.perform(post("/api/usuarios").with(user("admin-test").roles("ADMINISTRADOR"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                          {"username":"nuevo-test","password":"prueba123","roles":["NOTIFICADOR","ADMINISTRADOR"]}
+                          {"username":"nuevo-test","password":"clave-de-prueba-larga","roles":["NOTIFICADOR","ADMINISTRADOR"]}
                           """))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.roles", hasItems("NOTIFICADOR", "ADMINISTRADOR")))
@@ -64,10 +64,12 @@ class UsuarioPersistenciaTest {
         entityManager.clear();
         Usuario u = usuarios.findByUsername("nuevo-test").orElseThrow();
         assertThat(u.getRoles()).containsExactlyInAnyOrder(Rol.NOTIFICADOR, Rol.ADMINISTRADOR);
-        assertThat(encoder.matches("prueba123", u.getPassword())).isTrue();
+        assertThat(encoder.matches("clave-de-prueba-larga", u.getPassword())).isTrue();
+        assertThat(u.requiereCambioPassword()).isTrue();
         var login = mvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"username\":\"nuevo-test\",\"password\":\"prueba123\"}"))
+                        .content("{\"username\":\"nuevo-test\",\"password\":\"clave-de-prueba-larga\"}"))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$.requiereCambioPassword").value(true))
                 .andExpect(jsonPath("$.roles", hasItems("NOTIFICADOR", "ADMINISTRADOR"))).andReturn();
         String token = JsonPath.read(login.getResponse().getContentAsString(), "$.token");
         assertThat(decoder.decode(token).getClaimAsStringList("roles"))

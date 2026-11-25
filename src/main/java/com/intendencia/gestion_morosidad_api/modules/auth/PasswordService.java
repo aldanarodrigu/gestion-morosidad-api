@@ -5,7 +5,6 @@ import com.intendencia.gestion_morosidad_api.modules.usuario.UsuarioRepository;
 import com.intendencia.gestion_morosidad_api.shared.exception.RecursoNoEncontradoException;
 import com.intendencia.gestion_morosidad_api.shared.exception.ReglaNegocioException;
 import java.security.SecureRandom;
-import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
 import lombok.RequiredArgsConstructor;
@@ -18,7 +17,6 @@ import org.springframework.stereotype.Service;
 @Slf4j
 public class PasswordService {
     private static final SecureRandom ALEATORIO = new SecureRandom();
-    private static final Duration VIGENCIA_TEMPORAL = Duration.ofHours(24);
 
     private final UsuarioRepository usuarios;
     private final PasswordEncoder encoder;
@@ -48,7 +46,7 @@ public class PasswordService {
         byte[] bytes = new byte[24];
         ALEATORIO.nextBytes(bytes);
         String password = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
-        Instant venceEn = Instant.now().plus(VIGENCIA_TEMPORAL);
+        Instant venceEn = Instant.now().plus(PoliticaPassword.VIGENCIA_TEMPORAL);
         guardar(usuario, password, venceEn);
         log.info("Contraseña restablecida para usuario id={} por administrador id={}",
                 usuario.getId(), administrador.getId());

@@ -9,7 +9,7 @@ Estados: **OK** = cumple y tiene test o evidencia en el código · **HALLAZGO** 
 | # | Severidad | Hallazgo | Dónde |
 |---|-----------|----------|-------|
 | H1 | Media | **Corregido (25/11/2026).** El token se asociaba solo al `username` (`sub`), no al id. Si se renombra un usuario y otro toma ese nombre (o se crea uno nuevo con él), los tokens vigentes del primero autentican como el segundo, porque ambos tienen `version_credencial = 0`. | `TokenService`, `JwtConfig`, `UsuarioService.updateUser` |
-| H2 | Media | Los usuarios que crea un administrador no cumplen la política de contraseñas: mínimo 8 caracteres en vez de 15 y sin cambio obligatorio en el primer ingreso. El administrador conoce la clave definitiva del usuario. | `UsuarioRequest`, `UsuarioService.saveUser` |
+| H2 | Media | **Corregido (25/11/2026).** Los usuarios que crea un administrador no cumplían la política de contraseñas: mínimo 8 caracteres en vez de 15 y sin cambio obligatorio en el primer ingreso. El administrador conocía la clave definitiva del usuario. | `UsuarioRequest`, `UsuarioService.saveUser` |
 | H3 | Media | Swagger UI y `/v3/api-docs` son públicos también con el perfil `prod`: exponen el mapa completo de la API sin autenticación. | `SecurityConfig`, `application-prod.properties` |
 | H4 | Baja | El bloqueo de login es por cuenta: cualquiera puede bloquear la cuenta `admin` (u otra conocida) con 5 intentos fallidos. Tampoco hay límite por IP, lo que permite probar una misma clave contra muchas cuentas (password spraying). | `LimitadorLogin` |
 | H5 | Baja | Fuera de `prod`, el admin inicial se crea con `admin/admin123` y no se le exige cambiar la clave. Si una base de QA o demo con datos reales se levanta sin el perfil `prod`, queda con una credencial conocida. | `DataInitializer` |
@@ -18,7 +18,7 @@ Estados: **OK** = cumple y tiene test o evidencia en el código · **HALLAZGO** 
 Corrección sugerida:
 
 - **H1 (corregido):** el token lleva el claim `uid` con el id del usuario y `JwtConfig` lo compara con la cuenta que hoy tiene ese username; si no coincide o falta, responde 401. Incrementar `version_credencial` al renombrar no alcanzaba, porque una cuenta nueva arranca en 0. Tests: `AutenticacionJwtTest#tokenDeUnaCuentaCuyoUsernameTomoOtraNoAutenticaComoLaNueva` y `#tokenSinIdDeUsuarioDevuelve401`.
-- **H2:** aplicar `PoliticaPassword.validarNueva` y crear la cuenta con clave temporal, igual que en el reset.
+- **H2 (corregido):** el alta aplica `PoliticaPassword.validarNueva` (15 caracteres, hasta 72 bytes) y deja la clave como temporal por 24 h, igual que el reset: al ingresar, el usuario solo puede cambiarla. Tests: `UsuarioServiceTest#elAltaDejaLaClaveComoTemporalYExigeCambiarlaAlIngresar`, `#claveQueNoCumpleLaPoliticaNoCreaElUsuario` y `UsuarioPersistenciaTest`.
 - **H3:** `springdoc.api-docs.enabled=false` y `springdoc.swagger-ui.enabled=false` en `application-prod.properties`.
 - **H4:** sumar un límite por IP en el proxy o en la API y aceptar el riesgo de bloqueo del admin, o mitigarlo.
 - **H5:** marcar la cuenta como temporal (`password_temporal_hasta`) también en dev.
@@ -39,7 +39,8 @@ Corrección sugerida:
 - [x] **OK**: el login se bloquea tras 5 fallos en 15 min (configurable) y el contador está en base, así que vale entre instancias.
 - [x] **OK**: el login responde "Credenciales inválidas" tanto si el usuario no existe como si la clave es incorrecta.
 - [x] **OK**: el reset genera una clave temporal aleatoria de 24 bytes, válida 24 h y con cambio obligatorio; mientras tanto solo se permiten `/api/auth/me` y el cambio de clave.
-- [ ] **HALLAZGO H2**, **H4**.
+- [x] **OK (H2 corregido)**: el alta de usuarios exige 15 caracteres y obliga a cambiar la clave en el primer ingreso.
+- [ ] **HALLAZGO H4**.
 - [ ] **PENDIENTE**: comparar con ZAP los tiempos de respuesta del login con usuario existente e inexistente (enumeración por timing).
 
 ### API3 · Autorización a nivel de propiedad (exposición y asignación masiva)

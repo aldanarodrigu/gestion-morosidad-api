@@ -2,8 +2,12 @@ package com.intendencia.gestion_morosidad_api.modules.auth;
 
 import com.intendencia.gestion_morosidad_api.shared.exception.ReglaNegocioException;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 
 public final class PoliticaPassword {
+    // Vigencia de las contraseñas temporales (alta de usuario y restablecimiento).
+    public static final Duration VIGENCIA_TEMPORAL = Duration.ofHours(24);
+
     private PoliticaPassword() {}
 
     public static void validarNueva(String password) {
