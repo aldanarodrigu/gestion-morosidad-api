@@ -1,5 +1,8 @@
 package com.intendencia.gestion_morosidad_api.config;
 
+import com.intendencia.gestion_morosidad_api.modules.auth.AuthController;
+import com.intendencia.gestion_morosidad_api.modules.auth.AuthService;
+import com.intendencia.gestion_morosidad_api.modules.usuario.UsuarioRepository;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springdoc.core.configuration.SpringDocConfiguration;
@@ -17,15 +20,15 @@ import org.springframework.security.oauth2.server.resource.authentication.JwtAut
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RestController;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /** Swagger UI y OpenAPI quedan disponibles en desarrollo y no se publican con el perfil prod. */
-@WebMvcTest(DocumentacionApiPerfilTest.Sonda.class)
-@Import({SecurityConfig.class, DocumentacionApiPerfilTest.Sonda.class})
+// Usa un controlador real: un @RestController anidado acá se registraría en los contextos de otros tests
+// (los @Test están en las clases anidadas, así que el filtro de tipos de test no excluiría esta clase).
+@WebMvcTest(AuthController.class)
+@Import(SecurityConfig.class)
 // @WebMvcTest no carga springdoc: se importa su configuración para probar el comportamiento real.
 @ImportAutoConfiguration({SpringDocConfiguration.class, SpringDocConfigProperties.class,
         SpringDocWebMvcConfiguration.class, SwaggerConfig.class, SwaggerUiConfigProperties.class,
@@ -33,10 +36,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class DocumentacionApiPerfilTest {
     @MockitoBean JwtDecoder decoder;
     @MockitoBean JwtAuthenticationConverter converter;
-
-    @RestController static class Sonda {
-        @GetMapping("/api/qa-docs") String sonda() { return "ok"; }
-    }
+    @MockitoBean AuthService authService;
+    @MockitoBean UsuarioRepository usuarios;
 
     @Nested
     class Desarrollo {
