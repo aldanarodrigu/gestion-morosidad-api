@@ -71,6 +71,7 @@ class AutenticacionJwtTest {
 
     String token(JwtEncoder conEncoder, String subject, Instant emitido, Instant vence, Rol... roles) {
         var claims = JwtClaimsSet.builder().issuedAt(emitido).expiresAt(vence)
+                .claim(TokenService.CLAIM_USUARIO_ID, 1L)
                 .claim("roles", List.of(roles).stream().map(Enum::name).toList());
         if (subject != null) claims.subject(subject);
         return conEncoder.encode(JwtEncoderParameters.from(JwsHeader.with(MacAlgorithm.HS256).build(), claims.build()))
@@ -176,6 +177,28 @@ class AutenticacionJwtTest {
         when(usuarios.findByUsername("borrado")).thenReturn(Optional.empty());
 
         mvc.perform(get("/api/auth/me").header("Authorization", bearer(token))).andExpect(status().isUnauthorized());
+    }
+
+    @Test void tokenDeUnaCuentaCuyoUsernameTomoOtraNoAutenticaComoLaNueva() throws Exception {
+        // "ana" (id 1) se renombró y su username lo tomó una cuenta nueva con la misma versión de credencial.
+        String tokenDeLaAnterior = tokenVigente("ana", Rol.NOTIFICADOR);
+        var nueva = new Usuario(2L, "ana", "hash", EnumSet.of(Rol.ADMINISTRADOR), true);
+        when(usuarios.findByUsername("ana")).thenReturn(Optional.of(nueva));
+
+        mvc.perform(get("/api/usuarios").header("Authorization", bearer(tokenDeLaAnterior)))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/usuarios").header("Authorization", bearer(tokens.generateToken(nueva))))
+                .andExpect(status().isOk());
+    }
+
+    @Test void tokenSinIdDeUsuarioDevuelve401() throws Exception {
+        usuario("ana", true, Rol.ADMINISTRADOR);
+        Instant ahora = Instant.now();
+        var claims = JwtClaimsSet.builder().subject("ana").issuedAt(ahora).expiresAt(ahora.plus(Duration.ofHours(1))).build();
+        String sinId = encoder.encode(JwtEncoderParameters.from(JwsHeader.with(MacAlgorithm.HS256).build(), claims))
+                .getTokenValue();
+
+        mvc.perform(get("/api/auth/me").header("Authorization", bearer(sinId))).andExpect(status().isUnauthorized());
     }
 
     @Test void revocarUnRolAplicaAlMismoTokenAunqueElClaimLoIncluya() throws Exception {

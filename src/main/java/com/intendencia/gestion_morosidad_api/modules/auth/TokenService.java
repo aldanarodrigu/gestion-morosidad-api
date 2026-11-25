@@ -16,6 +16,7 @@ import java.time.Instant;
 @Service
 @RequiredArgsConstructor
 public class TokenService {
+    public static final String CLAIM_USUARIO_ID = "uid";
 
     private final JwtEncoder jwtEncoder;
 
@@ -27,6 +28,7 @@ public class TokenService {
 
         JwtClaimsSet claims = JwtClaimsSet.builder()
                 .subject(usuario.getUsername())
+                .claim(CLAIM_USUARIO_ID, usuario.getId())
                 .claim("credencial", usuario.getVersionCredencial())
                 .claim("roles", usuario.getRoles().stream().map(Enum::name).sorted().toList())
                 .issuedAt(now)

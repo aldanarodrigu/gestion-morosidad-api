@@ -1,6 +1,7 @@
 package com.intendencia.gestion_morosidad_api.config;
 
 import com.nimbusds.jose.jwk.source.ImmutableSecret;
+import com.intendencia.gestion_morosidad_api.modules.auth.TokenService;
 import com.intendencia.gestion_morosidad_api.modules.usuario.UsuarioRepository;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -56,6 +57,12 @@ public class JwtConfig {
                     .orElseThrow(() -> new OAuth2AuthenticationException(
                             new OAuth2Error("invalid_token"),
                             "Usuario inactivo o inexistente"));
+            // El username puede reasignarse a otra cuenta (renombre o alta nueva): el id evita que un
+            // token emitido para la cuenta anterior autentique como la actual.
+            if (!(jwt.getClaims().get(TokenService.CLAIM_USUARIO_ID) instanceof Number id)
+                    || id.longValue() != usuario.getId()) {
+                throw new OAuth2AuthenticationException(new OAuth2Error("invalid_token"), "Credencial no vigente");
+            }
             // Los tokens anteriores a la migración tienen implícitamente la versión inicial.
             Object version = jwt.getClaims().getOrDefault("credencial", 0L);
             if (!(version instanceof Number numero) || numero.longValue() != usuario.getVersionCredencial()

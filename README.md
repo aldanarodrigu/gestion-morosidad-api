@@ -522,6 +522,9 @@ falla si se agrega un endpoint sin declarar quién puede usarlo: al cambiar perm
 tabla `MATRIZ`. `PermisosRolesTest` cubre casos puntuales (por ejemplo, que el servicio de gestiones
 no se invoque si se rechaza el acceso) y `AutenticacionJwtTest` valida los tokens: vencidos, con otra
 firma, alterados o sin firma, y revocación de roles o desactivación con un token ya emitido.
+El token incluye el claim `uid` (id del usuario) y se rechaza si no coincide con la cuenta que hoy
+tiene ese username: así un token de una cuenta renombrada no sirve para otra que tome su nombre.
+Los tokens emitidos antes de este cambio no traen `uid` y piden volver a iniciar sesión.
 `POST /api/auth/login` ignora el header `Authorization`, para que un token vencido guardado en el
 navegador no impida volver a iniciar sesión.
 Este ajuste no requiere migracion de base de datos.
