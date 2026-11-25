@@ -123,12 +123,26 @@ Para el primer arranque con el perfil `prod` y una base vacía, definí `ADMIN_B
 Después de crear la cuenta inicial, podés retirar la variable. Si reutilizás una base donde la cuenta
 local conserva su contraseña de prueba, cambiala antes de exponer el sistema.
 
-El inicio de sesión acumula hasta cinco fallos por cuenta dentro de una ventana de 15 minutos.
-Al alcanzar el límite, los intentos siguientes reciben HTTP 429 con el tiempo restante en
-`Retry-After`. Un inicio válido limpia el contador y el bloqueo se vence por sí solo.
-Los parámetros `LOGIN_MAX_FALLOS`, `LOGIN_VENTANA_SEGUNDOS` y `LOGIN_BLOQUEO_SEGUNDOS` pueden
-configurarse en `.env`. El contador se guarda en PostgreSQL y se aplica también a nombres de
-usuario inexistentes. Afecta únicamente a los nuevos intentos de inicio de sesión.
+El inicio de sesión lleva tres contadores de fallos, con una ventana de 15 minutos:
+
+| Contador | Límite (variable) | Para qué |
+|----------|-------------------|----------|
+| Cuenta desde una IP | 5 (`LOGIN_MAX_FALLOS`) | Límite habitual. Bloquea esa cuenta solo desde esa IP: quien conoce el nombre `admin` no lo deja sin acceso desde otra dirección. |
+| IP contra cualquier cuenta | 20 (`LOGIN_MAX_FALLOS_IP`) | Frena probar una misma clave contra muchas cuentas. Un login correcto no lo reinicia. |
+| Cuenta desde todas las IP | 50 (`LOGIN_MAX_FALLOS_CUENTA`) | Tope para ataques repartidos entre muchas IP. |
+
+Al alcanzar cualquiera de los límites, los intentos siguientes reciben HTTP 429 con el tiempo restante
+en `Retry-After`. Un inicio válido limpia los contadores de esa cuenta (no el de la IP) y el bloqueo se
+vence por sí solo (`LOGIN_VENTANA_SEGUNDOS`, `LOGIN_BLOQUEO_SEGUNDOS`). Los contadores se guardan en
+PostgreSQL (`intentos_login`, con claves `cuenta-ip:`, `ip:` y `cuenta:`) y se aplican también a nombres
+de usuario inexistentes.
+
+Detrás del nginx del frontend, la IP del cliente se toma de `X-Real-IP`, que nginx sobrescribe con la
+dirección real. Tomcat solo acepta ese header si la conexión viene de una red privada o de localhost
+(`server.tomcat.remoteip`). Si en la red de la Intendencia muchos usuarios salen por la misma IP, el
+límite por IP es compartido entre ellos: subir `LOGIN_MAX_FALLOS_IP` si genera bloqueos. Si la API se
+expone sin el proxy dentro de una red privada, restringir los proxies de confianza con
+`SERVER_TOMCAT_REMOTEIP_INTERNAL_PROXIES` (regex), porque si no un cliente podría elegir su IP.
 
 ## Sincronización con GeoPagos
 

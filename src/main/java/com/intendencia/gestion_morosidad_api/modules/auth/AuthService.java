@@ -21,8 +21,8 @@ public class AuthService {
     private final TokenService tokenService;
     private final LimitadorLogin limite;
 
-    public LoginResponse login(LoginRequest request) {
-        return limite.autenticar(request.username(), () -> validarCredenciales(request));
+    public LoginResponse login(LoginRequest request, String ip) {
+        return limite.autenticar(request.username(), ip, () -> validarCredenciales(request));
     }
 
     private LoginResponse validarCredenciales(LoginRequest request) {

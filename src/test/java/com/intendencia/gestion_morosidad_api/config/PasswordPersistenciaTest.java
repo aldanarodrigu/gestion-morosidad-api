@@ -12,6 +12,7 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Callable;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.Executors;
 import java.util.stream.IntStream;
 import org.junit.jupiter.api.Test;
@@ -27,6 +28,7 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -37,7 +39,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest(properties = {"spring.config.name=arranque-aislado", "spring.config.import=",
     "sincronizacion.automatica.habilitada=false", "geopagos.username=", "geopagos.password=",
     "ADMIN_BOOTSTRAP_PASSWORD=clave-administrador-prueba", "auth.login.max-fallos=5",
-    "auth.login.ventana-segundos=900", "auth.login.bloqueo-segundos=900"})
+    "auth.login.max-fallos-ip=20", "auth.login.max-fallos-cuenta=50", "auth.login.ventana-segundos=900", "auth.login.bloqueo-segundos=900"})
 @ActiveProfiles("prod")
 @AutoConfigureMockMvc
 class PasswordPersistenciaTest {
@@ -50,6 +52,8 @@ class PasswordPersistenciaTest {
     @Autowired PasswordEncoder encoder;
     @Autowired JdbcTemplate jdbc;
     @Autowired LimitadorLogin limitador;
+    // Cada test usa su propia IP: el contador por IP es compartido y la base no se limpia entre tests.
+    private final String ip = ipAleatoria();
 
     @DynamicPropertySource
     static void database(DynamicPropertyRegistry r) {
@@ -151,7 +155,7 @@ class PasswordPersistenciaTest {
     }
 
     @Test
-    void cincoFallosBloqueanLaCuentaYReintentarNoProlongaElBloqueo() throws Exception {
+    void cincoFallosBloqueanLaCuentaSoloDesdeEsaIpYReintentarNoProlongaElBloqueo() throws Exception {
         String cuenta = crear(Rol.ANALISTA).getUsername();
         String otraCuenta = crear(Rol.NOTIFICADOR).getUsername();
         String tokenVigente = iniciarSesion(cuenta, ACTUAL, false);
@@ -159,15 +163,16 @@ class PasswordPersistenciaTest {
             rechazarLogin(i % 2 == 0 ? cuenta : " " + cuenta.toUpperCase(Locale.ROOT) + " ", "clave-incorrecta");
         }
         OffsetDateTime vence = jdbc.queryForObject(
-                "SELECT vence_en FROM intentos_login WHERE cuenta = ?", OffsetDateTime.class, cuenta);
+                "SELECT vence_en FROM intentos_login WHERE cuenta = ?", OffsetDateTime.class, claveCuentaIp(cuenta));
 
-        mvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
-                        .content(login(cuenta, ACTUAL)))
+        mvc.perform(pedirLogin(ip, cuenta, ACTUAL))
                 .andExpect(status().isTooManyRequests()).andExpect(header().exists("Retry-After"))
                 .andExpect(jsonPath("$.mensaje").value(org.hamcrest.Matchers.startsWith("Demasiados intentos")));
-        assertThat(jdbc.queryForObject("SELECT vence_en FROM intentos_login WHERE cuenta = ?", OffsetDateTime.class, cuenta))
-                .isEqualTo(vence);
+        assertThat(jdbc.queryForObject("SELECT vence_en FROM intentos_login WHERE cuenta = ?", OffsetDateTime.class,
+                claveCuentaIp(cuenta))).isEqualTo(vence);
         iniciarSesion(otraCuenta, ACTUAL, false);
+        // Quien conoce el nombre de la cuenta no la bloquea para quien entra desde otra dirección.
+        iniciarSesion(ipAleatoria(), cuenta, ACTUAL);
         mvc.perform(get("/api/auth/me").header("Authorization", tokenVigente)).andExpect(status().isOk());
 
         vencerContador(cuenta);
@@ -185,8 +190,8 @@ class PasswordPersistenciaTest {
         for (int i = 0; i < 4; i++) rechazarLogin(cuenta, "clave-incorrecta");
         vencerContador(cuenta);
         rechazarLogin(cuenta, "clave-incorrecta");
-        assertThat(jdbc.queryForObject("SELECT fallos FROM intentos_login WHERE cuenta = ?", Integer.class, cuenta))
-                .isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT fallos FROM intentos_login WHERE cuenta = ?", Integer.class,
+                claveCuentaIp(cuenta))).isEqualTo(1);
         iniciarSesion(cuenta, ACTUAL, false);
     }
 
@@ -195,27 +200,70 @@ class PasswordPersistenciaTest {
         String cuenta = "inexistente-" + UUID.randomUUID();
         try (var executor = Executors.newFixedThreadPool(8)) {
             var intentos = IntStream.range(0, 8).mapToObj(i -> (Callable<Integer>) () ->
-                    mvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
-                                    .content(login(cuenta, "clave-incorrecta")))
+                    mvc.perform(pedirLogin(ip, cuenta, "clave-incorrecta"))
                             .andReturn().getResponse().getStatus()).toList();
             var estados = new java.util.ArrayList<Integer>();
             for (var resultado : executor.invokeAll(intentos)) estados.add(resultado.get());
             assertThat(estados).containsExactlyInAnyOrder(401, 401, 401, 401, 401, 429, 429, 429);
         }
 
-        assertThat(jdbc.queryForObject("SELECT fallos FROM intentos_login WHERE cuenta = ?", Integer.class, cuenta))
-                .isEqualTo(5);
+        assertThat(jdbc.queryForObject("SELECT fallos FROM intentos_login WHERE cuenta = ?", Integer.class,
+                claveCuentaIp(cuenta))).isEqualTo(5);
         vencerContador(cuenta);
         limitador.limpiarVencidos();
         assertThat(filasDeIntentos(cuenta)).isZero();
     }
 
+    @Test
+    void veinteFallosDesdeUnaIpContraDistintasCuentasBloqueanEsaIpAunqueEntreUnaCuentaValida() throws Exception {
+        String valida = crear(Rol.ANALISTA).getUsername();
+        for (int i = 0; i < 19; i++) rechazarLogin("inexistente-" + UUID.randomUUID(), "clave-comun-probada");
+        // Un login correcto no reinicia el contador de la IP: si no, una cuenta propia permitiría seguir probando.
+        iniciarSesion(valida, ACTUAL, false);
+        rechazarLogin("inexistente-" + UUID.randomUUID(), "clave-comun-probada");
+
+        mvc.perform(pedirLogin(ip, valida, ACTUAL))
+                .andExpect(status().isTooManyRequests()).andExpect(header().exists("Retry-After"));
+        mvc.perform(pedirLogin(ip, "otra-" + UUID.randomUUID(), "clave-comun-probada"))
+                .andExpect(status().isTooManyRequests());
+        iniciarSesion(ipAleatoria(), valida, ACTUAL);
+    }
+
+    @Test
+    void cincuentaFallosDeUnaCuentaRepartidosEnVariasIpBloqueanLaCuentaDesdeCualquierIp() throws Exception {
+        String cuenta = crear(Rol.ANALISTA).getUsername();
+        for (int i = 0; i < 10; i++) {
+            String origen = ipAleatoria();
+            for (int j = 0; j < 5; j++) rechazarLogin(origen, cuenta, "clave-incorrecta");
+        }
+
+        mvc.perform(pedirLogin(ipAleatoria(), cuenta, ACTUAL)).andExpect(status().isTooManyRequests());
+        assertThat(jdbc.queryForObject("SELECT fallos FROM intentos_login WHERE cuenta = ?", Integer.class,
+                LimitadorLogin.claveCuenta(cuenta))).isEqualTo(50);
+    }
+
     private long filasDeIntentos(String cuenta) {
-        return jdbc.queryForObject("SELECT count(*) FROM intentos_login WHERE cuenta = ?", Long.class, cuenta);
+        return jdbc.queryForObject("SELECT count(*) FROM intentos_login WHERE cuenta IN (?, ?)", Long.class,
+                claveCuentaIp(cuenta), LimitadorLogin.claveCuenta(cuenta));
     }
 
     private void vencerContador(String cuenta) {
-        jdbc.update("UPDATE intentos_login SET vence_en = now() - interval '1 second' WHERE cuenta = ?", cuenta);
+        jdbc.update("UPDATE intentos_login SET vence_en = now() - interval '1 second' WHERE cuenta IN (?, ?)",
+                claveCuentaIp(cuenta), LimitadorLogin.claveCuenta(cuenta));
+    }
+
+    private String claveCuentaIp(String cuenta) {
+        return LimitadorLogin.claveCuentaIp(cuenta, ip);
+    }
+
+    private static String ipAleatoria() {
+        var azar = ThreadLocalRandom.current();
+        return "10.%d.%d.%d".formatted(azar.nextInt(256), azar.nextInt(256), 1 + azar.nextInt(254));
+    }
+
+    private MockHttpServletRequestBuilder pedirLogin(String origen, String usuario, String password) {
+        return post("/api/auth/login").contentType(MediaType.APPLICATION_JSON).content(login(usuario, password))
+                .with(pedido -> { pedido.setRemoteAddr(origen); return pedido; });
     }
 
     private Usuario crear(Rol... roles) {
@@ -223,17 +271,23 @@ class PasswordPersistenciaTest {
                 Set.of(roles), true));
     }
 
+    private void iniciarSesion(String origen, String usuario, String password) throws Exception {
+        mvc.perform(pedirLogin(origen, usuario, password)).andExpect(status().isOk());
+    }
+
     private String iniciarSesion(String usuario, String password, boolean requiereCambio) throws Exception {
-        String respuesta = mvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
-                        .content(login(usuario, password)))
+        String respuesta = mvc.perform(pedirLogin(ip, usuario, password))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.requiereCambioPassword").value(requiereCambio))
                 .andReturn().getResponse().getContentAsString();
         return "Bearer " + JsonPath.read(respuesta, "$.token");
     }
 
     private void rechazarLogin(String usuario, String password) throws Exception {
-        mvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON).content(login(usuario, password)))
-                .andExpect(status().isUnauthorized());
+        rechazarLogin(ip, usuario, password);
+    }
+
+    private void rechazarLogin(String origen, String usuario, String password) throws Exception {
+        mvc.perform(pedirLogin(origen, usuario, password)).andExpect(status().isUnauthorized());
     }
 
     private void cambiar(String token, String actual, String nueva) throws Exception {

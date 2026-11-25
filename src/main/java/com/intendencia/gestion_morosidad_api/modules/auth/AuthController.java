@@ -5,6 +5,7 @@ import com.intendencia.gestion_morosidad_api.modules.auth.dto.LoginResponse;
 import com.intendencia.gestion_morosidad_api.modules.usuario.UsuarioRepository;
 import com.intendencia.gestion_morosidad_api.modules.usuario.Rol;
 import com.intendencia.gestion_morosidad_api.shared.exception.RecursoNoEncontradoException;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -33,7 +34,9 @@ public class AuthController {
             boolean requiereCambioPassword) {}
 
     @PostMapping("/login")
-    public ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest loginRequest) {
-        return ResponseEntity.ok(authService.login(loginRequest));
+    public ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest loginRequest,
+            HttpServletRequest request) {
+        // Detrás del proxy, Tomcat toma la IP del cliente de X-Real-IP (ver server.tomcat.remoteip).
+        return ResponseEntity.ok(authService.login(loginRequest, request.getRemoteAddr()));
     }
 }

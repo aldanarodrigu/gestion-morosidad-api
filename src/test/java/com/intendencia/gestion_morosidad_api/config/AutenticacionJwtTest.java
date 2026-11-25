@@ -228,7 +228,7 @@ class AutenticacionJwtTest {
     }
 
     @Test void loginConCredencialesInvalidasDevuelve401SinDetalle() throws Exception {
-        when(authService.login(any())).thenThrow(new BadCredentialsException("Bad credentials"));
+        when(authService.login(any(), any())).thenThrow(new BadCredentialsException("Bad credentials"));
 
         mvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"username\":\"ana\",\"password\":\"incorrecta\"}"))
