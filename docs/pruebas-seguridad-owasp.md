@@ -10,7 +10,7 @@ Estados: **OK** = cumple y tiene test o evidencia en el código · **HALLAZGO** 
 |---|-----------|----------|-------|
 | H1 | Media | **Corregido (25/11/2026).** El token se asociaba solo al `username` (`sub`), no al id. Si se renombra un usuario y otro toma ese nombre (o se crea uno nuevo con él), los tokens vigentes del primero autentican como el segundo, porque ambos tienen `version_credencial = 0`. | `TokenService`, `JwtConfig`, `UsuarioService.updateUser` |
 | H2 | Media | **Corregido (25/11/2026).** Los usuarios que crea un administrador no cumplían la política de contraseñas: mínimo 8 caracteres en vez de 15 y sin cambio obligatorio en el primer ingreso. El administrador conocía la clave definitiva del usuario. | `UsuarioRequest`, `UsuarioService.saveUser` |
-| H3 | Media | Swagger UI y `/v3/api-docs` son públicos también con el perfil `prod`: exponen el mapa completo de la API sin autenticación. | `SecurityConfig`, `application-prod.properties` |
+| H3 | Media | **Corregido (25/11/2026).** Swagger UI y `/v3/api-docs` eran públicos también con el perfil `prod`: exponían el mapa completo de la API sin autenticación. | `SecurityConfig`, `application-prod.properties` |
 | H4 | Baja | El bloqueo de login es por cuenta: cualquiera puede bloquear la cuenta `admin` (u otra conocida) con 5 intentos fallidos. Tampoco hay límite por IP, lo que permite probar una misma clave contra muchas cuentas (password spraying). | `LimitadorLogin` |
 | H5 | Baja | Fuera de `prod`, el admin inicial se crea con `admin/admin123` y no se le exige cambiar la clave. Si una base de QA o demo con datos reales se levanta sin el perfil `prod`, queda con una credencial conocida. | `DataInitializer` |
 | H6 | Baja | Al cambiar los roles o desactivar un usuario no se incrementa `version_credencial`. Hoy no es explotable, porque los roles y `activo` se leen de la base en cada request, pero el claim `roles` del JWT queda desactualizado y no debe usarse para autorizar. | `UsuarioService.updateUser` |
@@ -19,7 +19,7 @@ Corrección sugerida:
 
 - **H1 (corregido):** el token lleva el claim `uid` con el id del usuario y `JwtConfig` lo compara con la cuenta que hoy tiene ese username; si no coincide o falta, responde 401. Incrementar `version_credencial` al renombrar no alcanzaba, porque una cuenta nueva arranca en 0. Tests: `AutenticacionJwtTest#tokenDeUnaCuentaCuyoUsernameTomoOtraNoAutenticaComoLaNueva` y `#tokenSinIdDeUsuarioDevuelve401`.
 - **H2 (corregido):** el alta aplica `PoliticaPassword.validarNueva` (15 caracteres, hasta 72 bytes) y deja la clave como temporal por 24 h, igual que el reset: al ingresar, el usuario solo puede cambiarla. Tests: `UsuarioServiceTest#elAltaDejaLaClaveComoTemporalYExigeCambiarlaAlIngresar`, `#claveQueNoCumpleLaPoliticaNoCreaElUsuario` y `UsuarioPersistenciaTest`.
-- **H3:** `springdoc.api-docs.enabled=false` y `springdoc.swagger-ui.enabled=false` en `application-prod.properties`.
+- **H3 (corregido):** `springdoc.api-docs.enabled=false` y `springdoc.swagger-ui.enabled=false` en `application-prod.properties`; en desarrollo siguen disponibles. Test: `DocumentacionApiPerfilTest` (200 sin perfil, 404 con `prod`).
 - **H4:** sumar un límite por IP en el proxy o en la API y aceptar el riesgo de bloqueo del admin, o mitigarlo.
 - **H5:** marcar la cuenta como temporal (`password_temporal_hasta`) también en dev.
 
@@ -75,7 +75,7 @@ Corrección sugerida:
 - [x] **OK**: CSRF está deshabilitado de forma correcta para una API stateless con Bearer: no hay cookies de sesión.
 - [x] **OK**: no hay CORS configurado, así que se aplica la política same-origin y el frontend entra por el proxy `/api` de nginx.
 - [x] **OK**: los contenedores corren sin root, con el backend `read_only`, `no-new-privileges` y puertos publicados solo en 127.0.0.1.
-- [ ] **HALLAZGO H3** (Swagger público en prod).
+- [x] **OK (H3 corregido)**: con el perfil `prod`, Swagger UI y OpenAPI no se publican (404).
 - [ ] **PENDIENTE**: TLS y HSTS en el dominio real; las pruebas locales fueron por HTTP.
 - [ ] **PENDIENTE**: ejecutar el baseline scan de ZAP contra el Compose local y revisar las cabeceras de la API (`X-Content-Type-Options`, `Cache-Control: no-store` en las respuestas con datos personales).
 
@@ -125,6 +125,6 @@ Datos tratados: documento, nombre, dirección y padrones del contribuyente; tel�
 3. Con un token de NOTIFICADOR, llamar a `/api/usuarios`, `/api/deudas/exportar` y `PUT /api/deudas/{id}/estado`: deben dar 403.
 4. Verificar H1: renombrar el usuario `a` a `a2`, crear un usuario nuevo `a` y usar el token viejo de `a`: debe dar 401.
 5. Reproducir H4: con 5 logins fallidos contra `admin`, el admin real queda bloqueado 15 min.
-6. Con el perfil prod: `GET /swagger-ui.html` y `/v3/api-docs` sin token. Hoy responden 200 (H3).
+6. Con el perfil prod: `GET /swagger-ui.html` y `/v3/api-docs` sin token: deben responder 404 (H3).
 7. Baseline scan de ZAP contra el Compose local: revisar cabeceras, cookies y divulgación de información.
 8. Exportación CSV con un contribuyente cuyo nombre empiece con `=`: la celda debe salir con `'` al inicio.

@@ -275,7 +275,8 @@ son normales; no volver esas entidades a `GenerationType.IDENTITY`.
 | `POST /api/sincronizaciones/deudas` | Sincronización manual (Administrador) |
 
 Las respuestas paginadas tienen la forma `{contenido, pagina, tamanio, totalElementos, totalPaginas}`
-(máximo 100 por página). La documentación completa está en `/swagger-ui.html`.
+(máximo 100 por página). La documentación completa está en `/swagger-ui.html`
+(solo en desarrollo: con el perfil `prod`, Swagger UI y `/v3/api-docs` responden 404).
 
 ## Migraciones (Flyway)
 
