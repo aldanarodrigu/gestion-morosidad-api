@@ -111,7 +111,7 @@ class UsuarioPersistenciaTest {
                     .andExpect(status().isForbidden());
             mvc.perform(post("/api/usuarios").header("Authorization", "Bearer " + token)
                             .contentType(MediaType.APPLICATION_JSON)
-                            .content("{\"username\":\"prohibido\",\"password\":\"prueba123\",\"roles\":[\"ADMINISTRADOR\"]}"))
+                            .content("{\"username\":\"prohibido\",\"password\":\"clave-de-prueba-larga\",\"roles\":[\"ADMINISTRADOR\"]}"))
                     .andExpect(status().isForbidden());
             mvc.perform(put("/api/usuarios/1").header("Authorization", "Bearer " + token)
                             .contentType(MediaType.APPLICATION_JSON)
@@ -184,7 +184,7 @@ class UsuarioPersistenciaTest {
         for (String roles : new String[]{"[]", "[null]", "[\"DESCONOCIDO\"]"}) {
             mvc.perform(post("/api/usuarios").with(user("admin-test").roles("ADMINISTRADOR"))
                             .contentType(MediaType.APPLICATION_JSON)
-                            .content("{\"username\":\"sinroles\",\"password\":\"prueba123\",\"roles\":" + roles + "}"))
+                            .content("{\"username\":\"sinroles\",\"password\":\"clave-de-prueba-larga\",\"roles\":" + roles + "}"))
                     .andExpect(status().isBadRequest());
         }
         assertThat(usuarios.existsByUsername("sinroles")).isFalse();
@@ -194,7 +194,7 @@ class UsuarioPersistenciaTest {
         crear("duplicado-test", Rol.ANALISTA);
         mvc.perform(post("/api/usuarios").with(user("admin-test").roles("ADMINISTRADOR"))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"username\":\"duplicado-test\",\"password\":\"prueba123\",\"roles\":[\"ANALISTA\"]}"))
+                        .content("{\"username\":\"duplicado-test\",\"password\":\"clave-de-prueba-larga\",\"roles\":[\"ANALISTA\"]}"))
                 .andExpect(status().isConflict());
         mvc.perform(get("/api/usuarios")).andExpect(status().isUnauthorized());
     }
@@ -224,9 +224,10 @@ class UsuarioPersistenciaTest {
 
     @Test void rechazaCamposInvalidosSinCrearNiModificar() throws Exception {
         for (String contenido : new String[]{"{}",
-                "{\"username\":\" \",\"password\":\"prueba123\",\"roles\":[\"ANALISTA\"]}",
-                "{\"username\":\"" + "a".repeat(256) + "\",\"password\":\"prueba123\",\"roles\":[\"ANALISTA\"]}",
+                "{\"username\":\" \",\"password\":\"clave-de-prueba-larga\",\"roles\":[\"ANALISTA\"]}",
+                "{\"username\":\"" + "a".repeat(256) + "\",\"password\":\"clave-de-prueba-larga\",\"roles\":[\"ANALISTA\"]}",
                 "{\"username\":\"corta-test\",\"password\":\"1234567\",\"roles\":[\"ANALISTA\"]}",
+                "{\"username\":\"corta-test\",\"password\":\"catorce-carac.\",\"roles\":[\"ANALISTA\"]}",
                 "{\"username\":\"larga-test\",\"password\":\"" + "a".repeat(73) + "\",\"roles\":[\"ANALISTA\"]}"}) {
             mvc.perform(post("/api/usuarios").with(user("admin-test").roles("ADMINISTRADOR"))
                             .contentType(MediaType.APPLICATION_JSON).content(contenido))
@@ -306,7 +307,7 @@ class UsuarioPersistenciaTest {
 
         mvc.perform(post("/api/usuarios").with(user("admin-test").roles("ADMINISTRADOR"))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"username\":\" Mayusculas-TEST \",\"password\":\"prueba123\",\"roles\":[\"ANALISTA\"]}"))
+                        .content("{\"username\":\" Mayusculas-TEST \",\"password\":\"clave-de-prueba-larga\",\"roles\":[\"ANALISTA\"]}"))
                 .andExpect(status().isConflict());
         mvc.perform(put("/api/usuarios/" + otro.getId()).with(user("admin-test").roles("ADMINISTRADOR"))
                         .contentType(MediaType.APPLICATION_JSON).content(edicion("MAYUSCULAS-test", "[\"ANALISTA\"]", true)))

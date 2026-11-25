@@ -196,7 +196,7 @@ class MatrizPermisosTest {
             new Endpoint("GET", "/api/usuarios", ADMIN),
             new Endpoint("GET", "/api/usuarios/{id}", ADMIN),
             new Endpoint("POST", "/api/usuarios", ADMIN, """
-                    {"username":"nuevo","password":"clave-segura","roles":["ANALISTA"]}"""),
+                    {"username":"nuevo","password":"clave-segura-de-prueba","roles":["ANALISTA"]}"""),
             new Endpoint("PUT", "/api/usuarios/{id}", ADMIN, """
                     {"username":"nuevo","roles":["ANALISTA"],"activo":true}"""),
             // Sincronización

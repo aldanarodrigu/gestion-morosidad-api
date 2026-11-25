@@ -13,8 +13,9 @@ public record UsuarioRequest(
         String username,
 
         @NotBlank
-        // El mínimo de 15 caracteres lo valida PoliticaPassword (cuenta caracteres Unicode, no UTF-16).
-        @Size(max = 72)
+        // Chequeo rápido con error por campo; PoliticaPassword valida en el servicio los 15 caracteres
+        // Unicode (@Size cuenta unidades UTF-16) y los 72 bytes.
+        @Size(min = 15, max = 72)
         String password,
 
         @NotEmpty
