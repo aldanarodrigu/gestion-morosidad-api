@@ -37,6 +37,9 @@ class DataInitializerTest {
         assertThat(admin.getActivo()).isTrue();
         assertThat(admin.getPassword()).isNotEqualTo("admin123");
         assertThat(encoder.matches("admin123", admin.getPassword())).isTrue();
+        // La clave conocida obliga a cambiarla en el primer ingreso, sin vencer mientras tanto.
+        assertThat(admin.requiereCambioPassword()).isTrue();
+        assertThat(admin.passwordTemporalVencida(java.time.Instant.parse("2100-01-01T00:00:00Z"))).isFalse();
     }
 
     @Test
@@ -96,5 +99,16 @@ class DataInitializerTest {
         verify(usuarios).save(admin.capture());
         assertThat(encoder.matches(configurada, admin.getValue().getPassword())).isTrue();
         assertThat(encoder.matches("admin123", admin.getValue().getPassword())).isFalse();
+        assertThat(admin.getValue().requiereCambioPassword()).isFalse();
+    }
+
+    @Test
+    void fueraDeProdConClaveConfiguradaNoExigeCambio() throws Exception {
+        when(usuarios.count()).thenReturn(0L);
+        new DataInitializer().initAdmin(usuarios, encoder, new MockEnvironment(), "clave-inicial-probada-2026").run();
+
+        var admin = ArgumentCaptor.forClass(Usuario.class);
+        verify(usuarios).save(admin.capture());
+        assertThat(admin.getValue().requiereCambioPassword()).isFalse();
     }
 }
