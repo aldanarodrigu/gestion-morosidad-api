@@ -9,6 +9,8 @@ import com.intendencia.gestion_morosidad_api.modules.tributo.dto.TributoResponse
 import com.intendencia.gestion_morosidad_api.shared.dto.PaginaResponse;
 import jakarta.validation.Valid;
 import java.util.List;
+import java.time.LocalDate;
+import org.springframework.format.annotation.DateTimeFormat;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -46,8 +48,10 @@ public class DeudaController {
             @RequestParam(required = false) Boolean conContacto,
             @RequestParam(required = false) String tipoPadron,
             @RequestParam(required = false) OrigenDatos origen,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate desde,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate hasta,
             @PageableDefault(size = 20, sort = "deudaDesde", direction = Sort.Direction.ASC) Pageable pageable) {
-        return deudaService.listar(new DeudaFiltro(estado, padron, contribuyente, localidad, segmento, tributo, conContacto, tipoPadron, origen), pageable);
+        return deudaService.listar(new DeudaFiltro(estado, padron, contribuyente, localidad, segmento, tributo, conContacto, tipoPadron, origen, desde, hasta), pageable);
     }
 
     @GetMapping("/deudas/tipos-padron")

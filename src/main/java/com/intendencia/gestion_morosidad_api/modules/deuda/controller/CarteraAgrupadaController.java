@@ -4,6 +4,8 @@ import com.intendencia.gestion_morosidad_api.modules.deuda.dto.*;
 import com.intendencia.gestion_morosidad_api.modules.deuda.entity.EstadoDeuda;
 import com.intendencia.gestion_morosidad_api.modules.deuda.service.CarteraAgrupadaService;
 import com.intendencia.gestion_morosidad_api.shared.dto.PaginaResponse;
+import java.time.LocalDate;
+import org.springframework.format.annotation.DateTimeFormat;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.*;
 import org.springframework.data.web.PageableDefault;
@@ -29,7 +31,9 @@ public class CarteraAgrupadaController {
             @RequestParam(required = false) Boolean conContacto,
             @RequestParam(required = false) String tipoPadron,
             @RequestParam(required = false) OrigenDatos origen,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate desde,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate hasta,
             @PageableDefault(size = 20, sort = "deudaDesde", direction = Sort.Direction.ASC) Pageable pageable) {
-        return service.listar(new DeudaFiltro(estado, padron, contribuyente, localidad, segmento, tributo, conContacto, tipoPadron, origen), pageable);
+        return service.listar(new DeudaFiltro(estado, padron, contribuyente, localidad, segmento, tributo, conContacto, tipoPadron, origen, desde, hasta), pageable);
     }
 }

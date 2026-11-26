@@ -5,6 +5,8 @@ import com.intendencia.gestion_morosidad_api.modules.deuda.entity.EstadoDeuda;
 import com.intendencia.gestion_morosidad_api.modules.deuda.service.CarteraExportacionService;
 import com.intendencia.gestion_morosidad_api.shared.enums.OrigenDatos;
 import java.io.IOException;
+import java.time.LocalDate;
+import org.springframework.format.annotation.DateTimeFormat;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
@@ -31,11 +33,13 @@ public class CarteraExportacionController {
             @RequestParam(required = false) Boolean conContacto,
             @RequestParam(required = false) String tipoPadron,
             @RequestParam(required = false) OrigenDatos origen,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate desde,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate hasta,
             @RequestParam(defaultValue = "false") boolean agrupar,
             @RequestParam(defaultValue = "XLSX") Formato formato,
             @PageableDefault(sort = "deudaDesde") Pageable pageable) throws IOException {
         var filtro = new DeudaFiltro(estado, padron, contribuyente, localidad, segmento, tributo,
-                conContacto, tipoPadron, origen);
+                conContacto, tipoPadron, origen, desde, hasta);
         boolean csv = formato == Formato.CSV;
         byte[] archivo = csv ? exportacionService.exportarCsv(filtro, pageable.getSort(), agrupar)
                 : exportacionService.exportar(filtro, pageable.getSort(), agrupar);

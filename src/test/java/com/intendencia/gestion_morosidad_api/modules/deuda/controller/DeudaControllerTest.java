@@ -66,6 +66,24 @@ class DeudaControllerTest {
     }
 
     @Test
+    void listarPasaElRangoDeFechasAlService() throws Exception {
+        when(deudaService.listar(any(), any()))
+                .thenReturn(new PaginaResponse<>(List.of(), 0, 20, 0, 0));
+
+        mockMvc.perform(get("/api/deudas").param("desde", "2024-01-01").param("hasta", "2024-12-31"))
+                .andExpect(status().isOk());
+
+        verify(deudaService).listar(eq(new DeudaFiltro(null, null, null, null, null, null, null, null, null,
+                java.time.LocalDate.of(2024, 1, 1), java.time.LocalDate.of(2024, 12, 31))), any());
+    }
+
+    @Test
+    void listarConHastaAnteriorADesdeDevuelve400() throws Exception {
+        mockMvc.perform(get("/api/deudas").param("desde", "2024-12-31").param("hasta", "2024-01-01"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void listarTiposPadronDevuelveCatalogo() throws Exception {
         when(deudaService.listarTiposPadron()).thenReturn(List.of("CIR", "CIU"));
         mockMvc.perform(get("/api/deudas/tipos-padron"))

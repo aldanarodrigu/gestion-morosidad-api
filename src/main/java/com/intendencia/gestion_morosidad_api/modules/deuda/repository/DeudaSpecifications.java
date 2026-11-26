@@ -11,6 +11,7 @@ import jakarta.persistence.criteria.Join;
 import jakarta.persistence.criteria.Path;
 import jakarta.persistence.criteria.Predicate;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -75,6 +76,13 @@ public final class DeudaSpecifications {
                                 ESCAPE
                         )
                 ));
+            }
+
+            if (filtro.desde() != null) {
+                predicados.add(cb.greaterThanOrEqualTo(root.<LocalDate>get("deudaDesde"), filtro.desde()));
+            }
+            if (filtro.hasta() != null) {
+                predicados.add(cb.lessThanOrEqualTo(root.<LocalDate>get("deudaDesde"), filtro.hasta()));
             }
 
             if (filtro.segmentoId() != null) {
