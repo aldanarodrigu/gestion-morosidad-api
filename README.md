@@ -878,7 +878,7 @@ La migración `V202611112100__motivo_ultimo_cobro.sql` agrega columnas opcionale
 
 ### Desglose del saldo por padrón
 
-La sincronización recibe `DEUDA_FACTURAS`, `SALDO_A_FAVOR` y `CREDITO_DESCONTADO` de ambas fuentes y los guarda como `deudaFacturas`, `saldoAFavor` y `creditoDescontado`. `importe` sigue siendo la deuda neta informada en `IMPORTE_DEUDA`: no se recalcula ni se descuenta el crédito nuevamente. Un campo ausente permanece null; cero es un valor informado.
+La sincronización recibe `DEUDA_FACTURAS`, `SALDO_A_FAVOR` y `CREDITO_DESCONTADO` de ambas fuentes y los guarda como `deudaFacturas`, `saldoAFavor` y `creditoDescontado`. `importe` sigue siendo la deuda neta informada en `IMPORTE_DEUDA`: no se recalcula ni se descuenta el crédito nuevamente. Un valor ausente conserva el último dato guardado y queda sin informar en una deuda nueva. Cero es un valor informado.
 
 En el detalle del contribuyente, pestaña **Padrones**, cada fila ofrece **Desglose del saldo**, con estos tres valores y la deuda neta, sin agregar columnas al listado de cartera. Los valores nuevos se muestran sin asumir una moneda.
 
@@ -909,7 +909,7 @@ Es una consulta informativa: no modifica titulares, documentos, contactos ni ges
 
 Pendientes de ambos orígenes incorpora `CANT_FACT_VENC`, `CANT_FACT_CON_DEUDA`, `ANIO_DESDE`, `ANIO_HASTA` y `CANT_ANIOS_DEUDA`. Se guardan/exponen como `cantidadFacturasVencidas`, `cantidadFacturasConDeuda`, `anioDesde`, `anioHasta` y `cantidadAniosDeuda`, junto al listado existente `aniosDeuda`.
 
-En **Detalle del contribuyente → Padrones → Facturas y años de deuda** se muestran sin consultas externas adicionales. Las facturas vencidas consideradas pueden incluir importes cero, negativos o desconocidos; las facturas con deuda son las de importe positivo antes de aplicar el saldo a favor. Los años son de facturación, no necesariamente años de vencimiento; no se infiere que todos los años del intervalo tengan deuda. Un campo ausente queda sin informar, distinto de cero.
+En **Detalle del contribuyente → Padrones → Facturas y años de deuda** se muestran sin consultas externas adicionales. Las facturas vencidas consideradas pueden incluir importes cero, negativos o desconocidos; las facturas con deuda son las de importe positivo antes de aplicar el saldo a favor. Los años son de facturación, no necesariamente años de vencimiento; no se infiere que todos los años del intervalo tengan deuda. Los campos ausentes conservan su último valor conocido. En una deuda nueva quedan sin informar, mientras que cero se guarda como valor.
 
 El Excel de cartera incluye estos cinco campos y la lista de años, tanto en exportación normal como agrupada. Las nuevas capturas copian los datos de las cuentas con deuda pendiente; las capturas anteriores no se reconstruyen. No se suman contadores a los reportes agregados.
 
@@ -920,7 +920,7 @@ La migración `V202611120000__facturas_anios_deuda.sql` agrega columnas opcional
 
 En **Configuración → Sincronización**, Administrador guarda el año mínimo (2013 inicialmente) e inicia la sincronización de Intendencia o SUCIVE. La configuración se persiste en la base y se utiliza tanto manualmente como en el proceso automático. Cambiar el año no cambia los saldos hasta completar una nueva sincronización de cada origen.
 
-El período corresponde a **vencimientos** desde el 01/01 del año elegido, incluido, hasta el día actual, excluido (`fecha_inicio`/`fecha_corte`). No equivale a filtrar por año de facturación. Se recorren todas las páginas con `include_total=0` y `meta.has_more`, validando páginas, tamaños, límites e identificadores. El COUNT externo se omite para evitar su coste, y la importación solo se aplica una vez completa la descarga. Una respuesta con vencimientos fuera de los límites se rechaza.
+El período corresponde a **vencimientos** desde el 01/01 del año elegido, incluido, hasta el día actual, excluido (`fecha_inicio`/`fecha_corte`). No equivale a filtrar por año de facturación. Se recorren todas las páginas con `include_total=0` y `meta.has_more`, validando páginas, tamaños, límites e identificadores. El COUNT externo se omite para evitar su coste, y la importación solo se aplica una vez completa la descarga. Una respuesta con vencimientos fuera de los límites se rechaza. Los campos opcionales vacíos o ausentes en pendientes conservan los datos existentes del padrón y la deuda. Se aplican los valores informados, incluidos los importes en cero, una lista válida de tributos y `SI` o `NO` para el convenio.
 
 Los CM ausentes en la consulta filtrada quedan con `enPeriodoGestion=false`, conservando identidad, importe anterior, estado y gestiones. No se interpreta su ausencia como pago ni cancelación. Cartera, agrupación, detalle habitual, reportes y exportaciones excluyen esos registros; siguen disponibles por ID para consulta histórica. Las nuevas capturas reflejan saldo cero y `FUERA_PERIODO` para una cuenta excluida. Si vuelve a aparecer al ampliar el período, se reactiva usando los datos de la fuente. `anioPeriodo` registra el año aplicado a cada deuda durante la última sincronización de su origen.
 

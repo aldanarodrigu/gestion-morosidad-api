@@ -34,6 +34,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
@@ -186,16 +187,7 @@ class SincronizacionDeudasProcessor {
             // Si existÃ­a una deuda, conservarla cancelada junto con sus gestiones.
             Deuda existente = ctx.deudasPorCm.get(cm);
             if (existente != null) {
-                existente.setImporte(fila.importeDeuda());
-                existente.setDeudaFacturas(fila.deudaFacturas());
-                existente.setSaldoAFavor(fila.saldoAFavor());
-                existente.setCreditoDescontado(fila.creditoDescontado());
-                existente.setCantidadFacturasVencidas(fila.cantidadFacturasVencidas());
-                existente.setCantidadFacturasConDeuda(fila.cantidadFacturasConDeuda());
-                existente.setAnioDesde(fila.anioDesde());
-                existente.setAnioHasta(fila.anioHasta());
-                existente.setCantidadAniosDeuda(fila.cantidadAniosDeuda());
-
+                actualizarSaldoYFacturas(existente, fila);
                 cancelarDeuda(existente, ctx);
             }
             ctx.cmsSinSaldo.add(cm);
@@ -259,12 +251,12 @@ class SincronizacionDeudasProcessor {
                 ctx.fuentePendientes(), domicilio, true));
 
         padron.setNumeroPadron(limitar(numeroPadron, 100));
-        if (ctx.origen == OrigenDatos.SUCIVE && texto(fila.matricula()) != null)
-            padron.setMatricula(limitar(texto(fila.matricula()), 150));
-        padron.setTipoPadron(limitar(texto(fila.padtipo()), 100));
-        padron.setLocalidad(limitar(texto(fila.localidad()), 255));
-        padron.setBlock(limitar(texto(fila.block()), 100));
-        padron.setUnidad(limitar(texto(fila.unidad()), 100));
+        if (ctx.origen == OrigenDatos.SUCIVE)
+            actualizarSiInformado(limitar(texto(fila.matricula()), 150), padron::setMatricula);
+        actualizarSiInformado(limitar(texto(fila.padtipo()), 100), padron::setTipoPadron);
+        actualizarSiInformado(limitar(texto(fila.localidad()), 255), padron::setLocalidad);
+        actualizarSiInformado(limitar(texto(fila.block()), 100), padron::setBlock);
+        actualizarSiInformado(limitar(texto(fila.unidad()), 100), padron::setUnidad);
         padron.setContribuyente(contribuyente);
         ctx.cmsImportados.add(cm);
 
@@ -278,30 +270,46 @@ class SincronizacionDeudasProcessor {
             ctx.actualizadas++;
         }
 
-        boolean convenio = "SI".equalsIgnoreCase(texto(fila.convenio()));
-        deuda.setImporte(fila.importeDeuda());
-        deuda.setDeudaFacturas(fila.deudaFacturas());
-        deuda.setSaldoAFavor(fila.saldoAFavor());
-        deuda.setCreditoDescontado(fila.creditoDescontado());
-        deuda.setCantidadFacturasVencidas(fila.cantidadFacturasVencidas());
-        deuda.setCantidadFacturasConDeuda(fila.cantidadFacturasConDeuda());
-        deuda.setAnioDesde(fila.anioDesde());
-        deuda.setAnioHasta(fila.anioHasta());
-        deuda.setCantidadAniosDeuda(fila.cantidadAniosDeuda());
-
-
-        deuda.setDeudaDesde(fila.deudaDesde());
-        deuda.setUltimoVencimiento(fila.ultimoVencimiento());
-        deuda.setAniosDeuda(limitar(texto(fila.aniosDeuda()), 200));
-        deuda.setConvenio(convenio);
+        actualizarSaldoYFacturas(deuda, fila);
+        actualizarSiInformado(fila.deudaDesde(), deuda::setDeudaDesde);
+        actualizarSiInformado(fila.ultimoVencimiento(), deuda::setUltimoVencimiento);
+        actualizarSiInformado(limitar(texto(fila.aniosDeuda()), 200), deuda::setAniosDeuda);
+        actualizarConvenio(deuda, texto(fila.convenio()));
         actualizarTributos(deuda, CodigosTributo.parsear(fila.tributosDeuda()), ctx);
-        deuda.setEstado(ReglasEstadoDeuda.enPendientes(deuda.getEstado(), convenio));
         deuda.setSegmentoMora(ctx.reglas.segmentoPara(deuda.getDeudaDesde(), ctx.hoy, padron.getTipoPadron()));
         deuda.setFechaSincronizacion(ctx.ahora);
     }
 
-    /** Solo modifica la colecciÃ³n si cambiÃ³: evita reescribir deuda_tributo en cada sincronizaciÃ³n. */
+    private static void actualizarSaldoYFacturas(Deuda deuda, GeoPagosFacturaPendienteDto fila) {
+        deuda.setImporte(fila.importeDeuda());
+        actualizarSiInformado(fila.deudaFacturas(), deuda::setDeudaFacturas);
+        actualizarSiInformado(fila.saldoAFavor(), deuda::setSaldoAFavor);
+        actualizarSiInformado(fila.creditoDescontado(), deuda::setCreditoDescontado);
+        actualizarSiInformado(fila.cantidadFacturasVencidas(), deuda::setCantidadFacturasVencidas);
+        actualizarSiInformado(fila.cantidadFacturasConDeuda(), deuda::setCantidadFacturasConDeuda);
+        actualizarSiInformado(fila.anioDesde(), deuda::setAnioDesde);
+        actualizarSiInformado(fila.anioHasta(), deuda::setAnioHasta);
+        actualizarSiInformado(fila.cantidadAniosDeuda(), deuda::setCantidadAniosDeuda);
+    }
+
+    private static void actualizarConvenio(Deuda deuda, String convenio) {
+        boolean activo = "SI".equalsIgnoreCase(convenio);
+        if (activo || "NO".equalsIgnoreCase(convenio)) {
+            deuda.setConvenio(activo);
+            deuda.setEstado(ReglasEstadoDeuda.enPendientes(deuda.getEstado(), activo));
+        } else if (deuda.getEstado() == EstadoDeuda.CANCELADA) {
+            // Un saldo positivo vuelve a activar la deuda, aunque el indicador de convenio falte.
+            deuda.setEstado(ReglasEstadoDeuda.enPendientes(deuda.getEstado(), deuda.isConvenio()));
+        }
+    }
+
+    private static <T> void actualizarSiInformado(T valor, Consumer<T> guardar) {
+        if (valor != null) guardar.accept(valor);
+    }
+
+    /** Solo reemplaza tributos si la fuente informa al menos un código y la lista cambia. */
     private void actualizarTributos(Deuda deuda, Set<String> codigos, Contexto ctx) {
+        if (codigos.isEmpty()) return;
         Set<String> actuales = deuda.getTributos().stream().map(Tributo::getCodigo).collect(Collectors.toSet());
         if (actuales.equals(codigos)) {
             return;

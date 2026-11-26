@@ -495,6 +495,116 @@ class SincronizacionCasosRealesPersistenciaTest {
                 """.formatted(cm);
     }
 
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void unaFilaParcialConservaLosDatosInformadosEnLaSincronizacionAnterior(boolean camposVacios) {
+        sincronizarDeudaCompleta();
+        var opcionales = camposVacios ? """
+                , "PADTIPO":" ", "LOCALIDAD":null, "BLOCK":" ", "UNIDAD":null, "TRIBUTOS_DEUDA":", ,",
+                  "CONVENIO":" ", "ULTIMO_VENCIMIENTO":"0000-00-00", "ANIOS_DEUDA":"",
+                  "DEUDA_FACTURAS":null, "SALDO_A_FAVOR":null, "CANT_FACT_VENC":null
+                """ : "";
+        sincronizarFila("""
+                {"CM":100202,"NUMERO_PADRON":4567,"IMPORTE_DEUDA":7800,"DEUDA_DESDE":"2026-08-01"%s}
+                """.formatted(opcionales), 2013);
+
+        var deuda = deuda("100202");
+        assertThat(deuda.getImporte()).isEqualByComparingTo("7800");
+        assertThat(deuda.getPadron().getTipoPadron()).isEqualTo("COM");
+        assertThat(deuda.getPadron().getLocalidad()).isEqualTo("SAN CARLOS");
+        assertThat(deuda.getPadron().getBlock()).isEqualTo("B");
+        assertThat(deuda.getPadron().getUnidad()).isEqualTo("003");
+        assertThat(deuda.getTributos()).extracting(Tributo::getCodigo).containsExactlyInAnyOrder("101", "3802");
+        assertThat(deuda.isConvenio()).isTrue();
+        assertThat(deuda.getEstado()).isEqualTo(EstadoDeuda.EN_CONVENIO);
+        assertThat(deuda.getUltimoVencimiento()).isEqualTo(LocalDate.of(2026, 9, 1));
+        assertThat(deuda.getAniosDeuda()).isEqualTo("2026");
+        assertThat(deuda.getDeudaFacturas()).isEqualByComparingTo("9000");
+        assertThat(deuda.getSaldoAFavor()).isEqualByComparingTo("1000");
+        assertThat(deuda.getCreditoDescontado()).isEqualByComparingTo("1000");
+        assertThat(deuda.getCantidadFacturasVencidas()).isEqualTo(3);
+        assertThat(deuda.getCantidadFacturasConDeuda()).isEqualTo(2);
+        assertThat(deuda.getAnioDesde()).isEqualTo(2026);
+        assertThat(deuda.getAnioHasta()).isEqualTo(2026);
+        assertThat(deuda.getCantidadAniosDeuda()).isEqualTo(1);
+        assertThat(deuda.getSegmentoMora()).isNotNull();
+    }
+
+    @Test
+    void tomaLosDatosNuevosYElNoExplicitoDeConvenio() {
+        sincronizarDeudaCompleta();
+        sincronizarFila("""
+                {"CM":100202,"NUMERO_PADRON":"7777","IMPORTE_DEUDA":8100,
+                 "DEUDA_DESDE":"2026-08-05","ULTIMO_VENCIMIENTO":"2026-09-05",
+                 "PADTIPO":"CIU","LOCALIDAD":"MALDONADO","BLOCK":"D","UNIDAD":"004",
+                 "TRIBUTOS_DEUDA":"900","CONVENIO":"NO","SALDO_A_FAVOR":0,"CREDITO_DESCONTADO":0,
+                 "DEUDA_FACTURAS":8100,"CANT_FACT_VENC":2}
+                """, 2013);
+
+        var deuda = deuda("100202");
+        assertThat(deuda.getImporte()).isEqualByComparingTo("8100");
+        assertThat(deuda.getPadron().getNumeroPadron()).isEqualTo("7777");
+        assertThat(deuda.getPadron().getTipoPadron()).isEqualTo("CIU");
+        assertThat(deuda.getPadron().getLocalidad()).isEqualTo("MALDONADO");
+        assertThat(deuda.getPadron().getBlock()).isEqualTo("D");
+        assertThat(deuda.getPadron().getUnidad()).isEqualTo("004");
+        assertThat(deuda.getTributos()).extracting(Tributo::getCodigo).containsExactly("900");
+        assertThat(deuda.isConvenio()).isFalse();
+        assertThat(deuda.getEstado()).isEqualTo(EstadoDeuda.PENDIENTE);
+        assertThat(deuda.getDeudaDesde()).isEqualTo(LocalDate.of(2026, 8, 5));
+        assertThat(deuda.getUltimoVencimiento()).isEqualTo(LocalDate.of(2026, 9, 5));
+        assertThat(deuda.getDeudaFacturas()).isEqualByComparingTo("8100");
+        assertThat(deuda.getSaldoAFavor()).isEqualByComparingTo("0");
+        assertThat(deuda.getCreditoDescontado()).isEqualByComparingTo("0");
+        assertThat(deuda.getCantidadFacturasVencidas()).isEqualTo(2);
+    }
+
+    @Test
+    void unSaldoCeroCancelaYUnSaldoPositivoReactivaAunqueFaltenCamposOpcionales() {
+        sincronizarDeudaCompleta();
+        sincronizarFila("""
+                {"CM":100202,"NUMERO_PADRON":4567,"IMPORTE_DEUDA":0,"CANT_FACT_CON_DEUDA":0}
+                """, null);
+
+        var cancelada = deuda("100202");
+        assertThat(cancelada.getEstado()).isEqualTo(EstadoDeuda.CANCELADA);
+        assertThat(cancelada.getImporte()).isEqualByComparingTo("0");
+        assertThat(cancelada.getDeudaFacturas()).isEqualByComparingTo("9000");
+        assertThat(cancelada.getCantidadFacturasConDeuda()).isZero();
+
+        sincronizarFila("""
+                {"CM":100202,"NUMERO_PADRON":4567,"IMPORTE_DEUDA":1000,"CONVENIO":"DESCONOCIDO"}
+                """, null);
+
+        var reactivada = deuda("100202");
+        assertThat(reactivada.getEstado()).isEqualTo(EstadoDeuda.EN_CONVENIO);
+        assertThat(reactivada.getImporte()).isEqualByComparingTo("1000");
+        assertThat(reactivada.getDeudaDesde()).isEqualTo(LocalDate.of(2026, 8, 1));
+        assertThat(reactivada.getTributos()).extracting(Tributo::getCodigo).containsExactlyInAnyOrder("101", "3802");
+    }
+
+    private void sincronizarDeudaCompleta() {
+        sincronizarFila("""
+                {"CM":100202,"NUMERO_PADRON":4567,"IMPORTE_DEUDA":8000,
+                 "DEUDA_DESDE":"2026-08-01","ULTIMO_VENCIMIENTO":"2026-09-01","ANIOS_DEUDA":"2026",
+                 "PADTIPO":"COM","LOCALIDAD":"SAN CARLOS","BLOCK":"B","UNIDAD":"003",
+                 "TRIBUTOS_DEUDA":"101, 3802","CONVENIO":"SI","DEUDA_FACTURAS":9000,
+                 "SALDO_A_FAVOR":1000,"CREDITO_DESCONTADO":1000,"CANT_FACT_VENC":3,
+                 "CANT_FACT_CON_DEUDA":2,"ANIO_DESDE":2026,"ANIO_HASTA":2026,"CANT_ANIOS_DEUDA":1}
+                """, 2013);
+    }
+
+    private void sincronizarFila(String cuerpo, Integer anioMinimo) {
+        var fila = json.readValue(cuerpo, GeoPagosFacturaPendienteDto.class);
+        var pendientes = new IntendenciaApiResponse<>(List.of(fila), null);
+        when(geoPagosClient.obtenerFacturasPendientes(any(), any())).thenReturn(pendientes);
+        when(geoPagosClient.obtenerFacturasCanceladas(any(), any())).thenReturn(new IntendenciaApiResponse<>(List.of(), null));
+        when(geoPagosClient.obtenerContribuyentes()).thenReturn(new IntendenciaApiResponse<>(List.of(), null));
+        service.sincronizar(OrigenDatos.INTENDENCIA, anioMinimo);
+        em.flush();
+        em.clear();
+    }
+
     /** Con período, un saldo cero en la respuesta no debería rechazar el resto de la sincronización. */
     @Test
     void servicioConUnSaldoCeroImportaLasDemasDeudas() {
