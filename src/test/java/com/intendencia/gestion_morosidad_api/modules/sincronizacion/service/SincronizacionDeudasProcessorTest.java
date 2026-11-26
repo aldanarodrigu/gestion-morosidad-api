@@ -10,6 +10,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.intendencia.gestion_morosidad_api.modules.cancelacion.Cancelacion;
 import com.intendencia.gestion_morosidad_api.modules.cancelacion.CancelacionRepository;
 import com.intendencia.gestion_morosidad_api.modules.reporte.EvolucionMensualRepository;
 import com.intendencia.gestion_morosidad_api.integration.intendencia.geopagos.dto.GeoPagosFacturaCanceladaDto;
@@ -337,6 +338,7 @@ class SincronizacionDeudasProcessorTest {
         GeoPagosFacturaCanceladaDto cobro = new GeoPagosFacturaCanceladaDto(
                 123, 4567, "Nombre actualizado", documentoCobro, 9876,
                 LocalDate.of(2026, 9, 2), new BigDecimal("100.00"), null);
+        cuandoCobroGuardado(cobro);
 
         processor.procesar(List.of(), List.of(cobro), List.of(),
                 LocalDate.of(2026, 9, 24), LocalDateTime.of(2026, 9, 24, 12, 0));
@@ -356,6 +358,7 @@ class SincronizacionDeudasProcessorTest {
         when(deudaRepository.findAllConPadronPorOrigen(OrigenDatos.INTENDENCIA)).thenReturn(List.of(deuda));
         GeoPagosFacturaCanceladaDto cobro = new GeoPagosFacturaCanceladaDto(
                 123, 4567, null, null, 9876, LocalDate.of(2026,9,2), new BigDecimal("100.00"), motivo);
+        cuandoCobroGuardado(cobro);
         processor.procesar(List.of(), List.of(cobro), List.of(), LocalDate.of(2026,9,24), LocalDateTime.of(2026,9,24,12,0));
         assertThat(deuda.getMotivoUltimoCobro()).isEqualTo(motivo == null ? null : motivo.trim());
         assertThat(deuda.getImporteUltimoCobro()).isEqualByComparingTo("100.00");
@@ -368,9 +371,19 @@ class SincronizacionDeudasProcessorTest {
         deuda.setMotivoUltimoCobro("ANULADO POR ERROR");
         when(deudaRepository.findAllConPadronPorOrigen(OrigenDatos.INTENDENCIA)).thenReturn(List.of(deuda));
         var cobro = new GeoPagosFacturaCanceladaDto(123,4567,null,null,9876,LocalDate.of(2026,9,2),new BigDecimal("100.00"),"PAGO");
+        cuandoCobroGuardado(cobro);
         processor.procesar(List.of(), List.of(cobro), List.of(), LocalDate.of(2026,9,24), LocalDateTime.of(2026,9,24,12,0));
         assertThat(deuda.getMotivoUltimoCobro()).isEqualTo("ANULADO POR ERROR");
         assertThat(deuda.getFechaUltimoCobro()).isEqualTo(LocalDate.of(2026,9,20));
+    }
+
+    private void cuandoCobroGuardado(GeoPagosFacturaCanceladaDto cobro) {
+        String motivo = cobro.motivoAnulacion();
+        var guardado = new Cancelacion(1L, OrigenDatos.INTENDENCIA, "123", "9876", "4567", null, null,
+                cobro.fechaCobro(), cobro.importeTotal(), motivo == null ? null : motivo.trim(),
+                LocalDateTime.of(2026, 9, 24, 12, 0));
+        when(cancelaciones.ultimosPorCm(OrigenDatos.INTENDENCIA, java.util.Set.of("123")))
+                .thenReturn(List.of(guardado));
     }
 
     @ParameterizedTest

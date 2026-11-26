@@ -70,7 +70,15 @@ public class EvolucionMensualRepository {
                 ),
                 cobros AS (
                     SELECT DISTINCT ON (c.origen, c.numero_cobro)
-                           c.origen, c.fecha_cobro, c.motivo, c.importe_total
+                           c.origen, c.fecha_cobro,
+                           first_value(nullif(trim(c.motivo), '')) OVER (
+                               PARTITION BY c.origen, c.numero_cobro, c.fecha_cobro
+                               ORDER BY (nullif(trim(c.motivo), '') IS NULL), c.detectada_en DESC, c.id DESC
+                           ) AS motivo,
+                           first_value(c.importe_total) OVER (
+                               PARTITION BY c.origen, c.numero_cobro, c.fecha_cobro
+                               ORDER BY (c.importe_total IS NULL), c.detectada_en DESC, c.id DESC
+                           ) AS importe_total
                     FROM cancelaciones c JOIN origenes o ON o.origen = c.origen
                     ORDER BY c.origen, c.numero_cobro, c.detectada_en DESC, c.id DESC
                 ),

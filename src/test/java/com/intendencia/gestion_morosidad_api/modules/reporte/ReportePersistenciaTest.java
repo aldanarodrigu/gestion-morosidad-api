@@ -103,6 +103,8 @@ class ReportePersistenciaTest {
   cancelaciones.guardar(List.of(
     cobro(intendencia, "1", "100", finMesAnterior, "50.00", "PAGO"),
     cobro(intendencia, "2", "100", finMesAnterior, "50.00", " pago "),
+    new Cancelacion(null, intendencia, "3", "100", null, null, null,
+            finMesAnterior, null, null, finMesAnterior.plusDays(1).atStartOfDay()),
     cobro(sucive, "1", "100", finMesAnterior, "40.00", "PAGO"),
     cobro(intendencia, "1", "101", finMesAnterior, "900.00", "ANULADA"),
     cobro(intendencia, "1", "102", hoy, "10.00", "PAGO"),

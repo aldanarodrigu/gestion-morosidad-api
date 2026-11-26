@@ -873,7 +873,7 @@ La sincronización de ambos orígenes recibe `MOTIVO_ANULACION` de facturas canc
 
 La respuesta de deudas expone el motivo y las nuevas capturas lo copian para conservar su valor histórico. Comparar cartera muestra **Último movimiento informado** y su motivo. Las capturas anteriores no se reconstruyen ni se atribuyen automáticamente a pagos.
 
-La migración `V202611112100__motivo_ultimo_cobro.sql` agrega columnas opcionales a deuda y captura_cuentas; Flyway la aplica al iniciar el backend. Los datos anteriores quedan sin motivo hasta que corresponda actualizarlos mediante sincronización (las capturas anteriores permanecen sin modificar). La sincronización consulta un intervalo de cobros, no reconstruye todo el historial.
+La migración `V202611112100__motivo_ultimo_cobro.sql` agrega columnas opcionales a deuda y captura_cuentas; Flyway la aplica al iniciar el backend. Los datos anteriores quedan sin motivo hasta que corresponda actualizarlos mediante sincronización (las capturas anteriores permanecen sin modificar). La sincronización consulta un intervalo de cobros. Cuando repite el mismo origen, CM y número de cobro, conserva el último importe y motivo conocidos si el proveedor los omite. Un importe en cero o un motivo informado actualiza el registro. El último movimiento de la deuda se obtiene de los cobros guardados para ese padrón y se conserva al volver a consultar un movimiento anterior.
 
 
 ### Desglose del saldo por padrón
@@ -953,7 +953,7 @@ El seguimiento se aísla por hilo y se libera al finalizar, para no mezclar tare
 
 ### Cancelar una sincronización manual
 
-Administrador puede solicitar `POST /api/sincronizaciones/ejecucion/cancelar`, también disponible como **Cancelar sincronización** en la pestaña. La tarea pasa a `CANCELANDO` y conserva bloqueados el inicio y el cambio de año hasta que el trabajador termina. Si una petición externa sigue activa, se espera su respuesta o timeout; después se descarta lo descargado y se confirma `CANCELADA`, sin procesar ni guardar deudas. No se interrumpe el hilo ni se libera prematuramente el bloqueo.
+El inicio y la consulta de estado devuelven un `id` único por ejecución. **Cancelar sincronización** envía ese identificador en `POST /api/sincronizaciones/ejecucion/cancelar` con el cuerpo `{"id":"<UUID>"}`. Si el identificador corresponde a una ejecución anterior, el servidor responde HTTP 409 y la pantalla actualiza el estado. Una solicitud válida durante la descarga pasa a `CANCELANDO` y conserva bloqueados el inicio y el cambio de año hasta que el trabajador termina. Si una petición externa sigue activa, se espera su respuesta o timeout; después se descarta lo descargado y se confirma `CANCELADA`, sin procesar ni guardar deudas. No se interrumpe el hilo ni se libera prematuramente el bloqueo.
 
 La cancelación y el comienzo de **Guardado** se coordinan atómicamente. Una vez iniciada esa etapa, el botón se deshabilita y el backend rechaza cancelar; se deja finalizar la transacción para evitar anunciar una cancelación después de confirmar cambios. La cancelación es idempotente si la tarea ya terminó. No cancela trabajos automáticos ni los iniciados mediante el endpoint síncrono anterior.
 

@@ -7,6 +7,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.intendencia.gestion_morosidad_api.modules.cancelacion.Cancelacion;
 import com.intendencia.gestion_morosidad_api.modules.cancelacion.CancelacionRepository;
 import com.intendencia.gestion_morosidad_api.modules.reporte.EvolucionMensualRepository;
 import com.intendencia.gestion_morosidad_api.integration.intendencia.geopagos.dto.GeoPagosContribuyenteDto;
@@ -414,9 +415,10 @@ class SincronizacionDeudasProcessorReglasTest {
     // ---------------------------------------------------------------- Cobros
 
     @Test
-    void conservaElCobroMasRecienteSinImportarElOrden() {
+    void consultaElUltimoCobroGuardadoEnLugarDeUsarElOrdenDeLlegada() {
         Deuda deuda = existente("123", EstadoDeuda.PENDIENTE, OrigenDatos.INTENDENCIA);
         cargar(OrigenDatos.INTENDENCIA, deuda);
+        cuandoUltimoCobroGuardado("500.00", "PAGO");
 
         processor.procesar(List.of(fila("123").build()), List.of(
                 cobro("123", LocalDate.of(2026, 9, 10), "500.00", "PAGO"),
@@ -443,11 +445,19 @@ class SincronizacionDeudasProcessorReglasTest {
     void motivoLargoSeRecortaAlLargoDeLaColumna() {
         Deuda deuda = existente("123", EstadoDeuda.PENDIENTE, OrigenDatos.INTENDENCIA);
         cargar(OrigenDatos.INTENDENCIA, deuda);
+        cuandoUltimoCobroGuardado("50.00", "X".repeat(80));
 
         processor.procesar(List.of(fila("123").build()),
                 List.of(cobro("123", LocalDate.of(2026, 9, 10), "50.00", "X".repeat(80))), List.of(), HOY, INICIO);
 
         assertThat(deuda.getMotivoUltimoCobro()).hasSize(60);
+    }
+
+    private void cuandoUltimoCobroGuardado(String importe, String motivo) {
+        var cobro = new Cancelacion(1L, OrigenDatos.INTENDENCIA, "123", "1", null, null, null,
+                LocalDate.of(2026, 9, 10), new BigDecimal(importe), motivo, AHORA);
+        when(cancelaciones.ultimosPorCm(OrigenDatos.INTENDENCIA, java.util.Set.of("123")))
+                .thenReturn(List.of(cobro));
     }
 
     // ---------------------------------------------------------------- Identidad y contactos

@@ -206,7 +206,8 @@ class MatrizPermisosTest {
                     {"anioMinimo":2020}"""),
             new Endpoint("GET", "/api/sincronizaciones/ejecucion", ADMIN),
             new Endpoint("POST", "/api/sincronizaciones/ejecucion", ADMIN),
-            new Endpoint("POST", "/api/sincronizaciones/ejecucion/cancelar", ADMIN)
+            new Endpoint("POST", "/api/sincronizaciones/ejecucion/cancelar", ADMIN, """
+                    {"id":"cfbe9cc7-f197-4788-afc5-26b1eb7ecb76"}""")
     );
 
     /** Las 7 combinaciones no vacías de roles: los permisos se suman. */

@@ -11,7 +11,7 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Optional;
-import java.util.function.BinaryOperator;
+import java.util.Set;
 import java.util.stream.Stream;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageImpl;
@@ -19,6 +19,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import org.springframework.jdbc.support.SqlArrayValue;
 import org.springframework.stereotype.Repository;
 
 @Repository
@@ -45,10 +46,9 @@ public class CancelacionRepository {
         // La fuente puede repetir el mismo cobro y CM por cada persona asociada.
         // PostgreSQL admite una sola actualización de cada clave dentro del INSERT del lote.
         var porCobro = new LinkedHashMap<ClaveCobro, Cancelacion>();
-        var elegirRepresentante = BinaryOperator.minBy(ORDEN_REPRESENTANTE);
         for (var cancelacion : cancelaciones) {
             var clave = new ClaveCobro(cancelacion.origen(), cancelacion.cm(), cancelacion.numeroCobro());
-            porCobro.merge(clave, cancelacion, elegirRepresentante);
+            porCobro.merge(clave, cancelacion, CancelacionRepository::consolidar);
         }
         jdbc.batchUpdate("""
                 INSERT INTO cancelaciones (
@@ -58,7 +58,8 @@ public class CancelacionRepository {
                 ON CONFLICT (origen, cm, numero_cobro) DO UPDATE SET
                     numero_padron = EXCLUDED.numero_padron, persona = EXCLUDED.persona,
                     documento = EXCLUDED.documento, fecha_cobro = EXCLUDED.fecha_cobro,
-                    importe_total = EXCLUDED.importe_total, motivo = EXCLUDED.motivo
+                    importe_total = coalesce(EXCLUDED.importe_total, cancelaciones.importe_total),
+                    motivo = coalesce(EXCLUDED.motivo, cancelaciones.motivo)
                 """, porCobro.values(), 500, (ps, c) -> {
             ps.setString(1, c.origen().name());
             ps.setString(2, c.cm());
@@ -68,9 +69,38 @@ public class CancelacionRepository {
             ps.setString(6, c.documento());
             ps.setObject(7, c.fechaCobro());
             ps.setBigDecimal(8, c.importeTotal());
-            ps.setString(9, c.motivo());
+            ps.setString(9, motivoInformado(c.motivo()));
             ps.setObject(10, c.detectadaEn());
         });
+    }
+
+    private static Cancelacion consolidar(Cancelacion primera, Cancelacion segunda) {
+        boolean primeraRepresenta = ORDEN_REPRESENTANTE.compare(primera, segunda) <= 0;
+        Cancelacion principal = primeraRepresenta ? primera : segunda;
+        Cancelacion otra = primeraRepresenta ? segunda : primera;
+        if (!principal.fechaCobro().equals(otra.fechaCobro())) return principal;
+
+        BigDecimal importe = principal.importeTotal() == null ? otra.importeTotal() : principal.importeTotal();
+        String motivo = motivoInformado(principal.motivo());
+        if (motivo == null) motivo = motivoInformado(otra.motivo());
+        return new Cancelacion(principal.id(), principal.origen(), principal.cm(), principal.numeroCobro(),
+                principal.numeroPadron(), principal.persona(), principal.documento(), principal.fechaCobro(),
+                importe, motivo, principal.detectadaEn());
+    }
+
+    private static String motivoInformado(String motivo) {
+        return motivo == null || motivo.isBlank() ? null : motivo;
+    }
+
+    public List<Cancelacion> ultimosPorCm(OrigenDatos origen, Set<String> cms) {
+        if (cms.isEmpty()) return List.of();
+        return consultas.query("""
+                SELECT DISTINCT ON (cm) *
+                FROM cancelaciones
+                WHERE origen = :origen AND cm = ANY(:cms)
+                ORDER BY cm, fecha_cobro DESC, id DESC
+                """, new MapSqlParameterSource("origen", origen.name())
+                .addValue("cms", new SqlArrayValue("text", cms.toArray())), this::mapear);
     }
 
     public PaginaResponse<Cancelacion> listar(FiltroCancelaciones filtro, Pageable pagina) {

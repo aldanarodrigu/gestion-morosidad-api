@@ -398,6 +398,7 @@ class SincronizacionDeudasProcessor {
 
     private void registrarCobros(List<GeoPagosFacturaCanceladaDto> canceladas, Contexto ctx) {
         List<Cancelacion> registros = new ArrayList<>();
+        Set<String> cmsConCobroIdentificado = new HashSet<>();
         for (GeoPagosFacturaCanceladaDto cobro : canceladas) {
             if (cobro == null) continue;
             String cm = texto(cobro.cm());
@@ -406,6 +407,7 @@ class SincronizacionDeudasProcessor {
                 registros.add(new Cancelacion(null, ctx.origen, cm, numeroCobro, texto(cobro.numeroPadron()),
                         texto(cobro.persona()), texto(cobro.documento()), cobro.fechaCobro(),
                         cobro.importeTotal(), texto(cobro.motivoAnulacion()), ctx.ahora));
+                if (ctx.deudasPorCm.containsKey(cm)) cmsConCobroIdentificado.add(cm);
             }
             // La consulta de contribuyentes no incluye DOCUMENTO. Un cobro reciente puede
             // completarlo para un padrÃ³n que ya no tiene facturas pendientes.
@@ -429,16 +431,26 @@ class SincronizacionDeudasProcessor {
                 }
             }
             Deuda deuda = ctx.deudasPorCm.get(cm);
-            if (deuda == null || cobro.fechaCobro() == null) {
-                continue;
-            }
-            if (deuda.getFechaUltimoCobro() == null || !cobro.fechaCobro().isBefore(deuda.getFechaUltimoCobro())) {
-                deuda.setFechaUltimoCobro(cobro.fechaCobro());
-                deuda.setImporteUltimoCobro(cobro.importeTotal());
-                deuda.setMotivoUltimoCobro(limitar(texto(cobro.motivoAnulacion()), 60));
+            if (numeroCobro == null && deuda != null && cobro.fechaCobro() != null
+                    && (deuda.getFechaUltimoCobro() == null || cobro.fechaCobro().isAfter(deuda.getFechaUltimoCobro()))) {
+                actualizarUltimoCobro(deuda, cobro.fechaCobro(), cobro.importeTotal(), cobro.motivoAnulacion());
             }
         }
         cancelacionRepository.guardar(registros);
+        if (cmsConCobroIdentificado.isEmpty()) return;
+
+        for (var cobro : cancelacionRepository.ultimosPorCm(ctx.origen, cmsConCobroIdentificado)) {
+            var deuda = ctx.deudasPorCm.get(cobro.cm());
+            if (deuda.getFechaUltimoCobro() == null || !cobro.fechaCobro().isBefore(deuda.getFechaUltimoCobro())) {
+                actualizarUltimoCobro(deuda, cobro.fechaCobro(), cobro.importeTotal(), cobro.motivo());
+            }
+        }
+    }
+
+    private static void actualizarUltimoCobro(Deuda deuda, LocalDate fecha, BigDecimal importe, String motivo) {
+        deuda.setFechaUltimoCobro(fecha);
+        deuda.setImporteUltimoCobro(importe);
+        deuda.setMotivoUltimoCobro(limitar(texto(motivo), 60));
     }
 
     /** CM, padrÃ³n, documento, etc. pueden llegar como nÃºmero o texto: siempre se guardan como texto. */

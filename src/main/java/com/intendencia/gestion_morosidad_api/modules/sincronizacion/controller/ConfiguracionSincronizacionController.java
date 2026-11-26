@@ -1,6 +1,8 @@
 package com.intendencia.gestion_morosidad_api.modules.sincronizacion.controller;
 import com.intendencia.gestion_morosidad_api.modules.sincronizacion.service.*;
 import com.intendencia.gestion_morosidad_api.shared.enums.OrigenDatos;
+import com.intendencia.gestion_morosidad_api.shared.exception.ReglaNegocioException;
+import java.util.UUID;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -22,9 +24,12 @@ public class ConfiguracionSincronizacionController {
             @RequestParam(defaultValue="INTENDENCIA") OrigenDatos origen) {
         return ResponseEntity.accepted().body(manual.iniciar(origen));
     }
-    @PostMapping("/ejecucion/cancelar") public ResponseEntity<SincronizacionManualService.Ejecucion> cancelar() {
-        var estado = manual.cancelar();
-        return estado == null ? ResponseEntity.noContent().build() : ResponseEntity.accepted().body(estado);
+    public record CancelarEjecucion(UUID id) {}
+    @PostMapping("/ejecucion/cancelar") public ResponseEntity<SincronizacionManualService.Ejecucion> cancelar(
+            @RequestBody(required = false) CancelarEjecucion ejecucion) {
+        if (ejecucion == null || ejecucion.id() == null)
+            throw new ReglaNegocioException("Indicá el identificador de la sincronización que querés cancelar.");
+        return ResponseEntity.accepted().body(manual.cancelar(ejecucion.id()));
     }
     @GetMapping("/ejecucion") public ResponseEntity<SincronizacionManualService.Ejecucion> estado() {
         var estado = manual.estado();

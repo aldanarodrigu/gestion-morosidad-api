@@ -647,6 +647,65 @@ class SincronizacionCasosRealesPersistenciaTest {
     }
 
     @Test
+    void unCobroRepetidoConservaImporteYMotivoYAdmiteUnaCorreccionExplicita() throws Exception {
+        var pendientes = pendientes("pendientes-dia2.json");
+        var original = new GeoPagosFacturaCanceladaDto(100201, 4567, null, null,
+                "401", DIA_1, new BigDecimal("400"), "PAGO");
+        var incompleto = new GeoPagosFacturaCanceladaDto(100201, 4567, null, null,
+                "401", DIA_1, null, "  ");
+        procesar(pendientes, List.of(original), List.of(), DIA_2);
+        procesar(pendientes, List.of(incompleto), List.of(), DIA_2);
+
+        assertThat(cobroGuardado("401").importeTotal()).isEqualByComparingTo("400");
+        assertThat(cobroGuardado("401").motivo()).isEqualTo("PAGO");
+        assertThat(deuda("100201").getImporteUltimoCobro()).isEqualByComparingTo("400");
+        assertThat(deuda("100201").getMotivoUltimoCobro()).isEqualTo("PAGO");
+        mvc.perform(get("/api/reportes/cartera").with(user("analista").roles("ANALISTA")).param("origen", "INTENDENCIA"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.evolucionMensual[0].cantidadPagos").value(1))
+                .andExpect(jsonPath("$.evolucionMensual[0].importePagos").value(400));
+
+        var correccion = new GeoPagosFacturaCanceladaDto(100201, 4567, null, null,
+                "401", DIA_1, BigDecimal.ZERO, "ANULADO");
+        procesar(pendientes, List.of(correccion), List.of(), DIA_2);
+
+        assertThat(cobroGuardado("401").importeTotal()).isZero();
+        assertThat(cobroGuardado("401").motivo()).isEqualTo("ANULADO");
+        assertThat(deuda("100201").getImporteUltimoCobro()).isZero();
+        assertThat(deuda("100201").getMotivoUltimoCobro()).isEqualTo("ANULADO");
+        mvc.perform(get("/api/reportes/cartera").with(user("analista").roles("ANALISTA")).param("origen", "INTENDENCIA"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.evolucionMensual[0].cantidadPagos").value(0));
+    }
+
+    @Test
+    void unMovimientoDistintoDelMismoDiaConservaSuPropiaInformacion() {
+        var pendientes = pendientes("pendientes-dia2.json");
+        var primero = new GeoPagosFacturaCanceladaDto(100201, 4567, null, null,
+                "401", DIA_1, new BigDecimal("400"), "PAGO");
+        var posterior = new GeoPagosFacturaCanceladaDto(100201, 4567, null, null,
+                "402", DIA_1, null, null);
+        procesar(pendientes, List.of(primero), List.of(), DIA_2);
+        procesar(pendientes, List.of(posterior), List.of(), DIA_2);
+        procesar(pendientes, List.of(primero), List.of(), DIA_2);
+
+        assertThat(cobroGuardado("401").importeTotal()).isEqualByComparingTo("400");
+        assertThat(cobroGuardado("401").motivo()).isEqualTo("PAGO");
+        assertThat(cobroGuardado("402").importeTotal()).isNull();
+        assertThat(cobroGuardado("402").motivo()).isNull();
+        assertThat(deuda("100201").getFechaUltimoCobro()).isEqualTo(DIA_1);
+        assertThat(deuda("100201").getImporteUltimoCobro()).isNull();
+        assertThat(deuda("100201").getMotivoUltimoCobro()).isNull();
+    }
+
+    private Cancelacion cobroGuardado(String numero) {
+        var filtro = new FiltroCancelaciones(OrigenDatos.INTENDENCIA, null, null, numero, null);
+        var filas = cancelaciones.listar(filtro, org.springframework.data.domain.PageRequest.of(0, 5)).contenido();
+        assertThat(filas).hasSize(1);
+        return filas.getFirst();
+    }
+
+    @Test
     void guardaUnCobroPorCmAunqueLaApiRepitaSusFilasEnElMismoLote() {
         var importe = new java.math.BigDecimal("425.75");
         var sinTitular = new GeoPagosFacturaCanceladaDto("100203", "8899", null, null,
@@ -654,7 +713,7 @@ class SincronizacionCasosRealesPersistenciaTest {
         var titularB = new GeoPagosFacturaCanceladaDto("100203", "8899", "Titular B", "002",
                 "001234", DIA_1, importe, "PAGO");
         var titularA = new GeoPagosFacturaCanceladaDto("100203", "8899", "Titular A", "001",
-                "001234", DIA_1, importe, "PAGO");
+                "001234", DIA_1, null, null);
         var otroCm = new GeoPagosFacturaCanceladaDto("100204", "8900", "Otro titular", "003",
                 "001234", DIA_1, importe, "PAGO");
         var pagina = org.springframework.data.domain.PageRequest.of(0, 20);
@@ -665,6 +724,7 @@ class SincronizacionCasosRealesPersistenciaTest {
         assertThat(primero.contenido()).singleElement().satisfies(c -> {
             assertThat(c.numeroCobro()).isEqualTo("001234");
             assertThat(c.importeTotal()).isEqualByComparingTo(importe);
+            assertThat(c.motivo()).isEqualTo("PAGO");
             assertThat(c.persona()).isEqualTo("Titular A");
             assertThat(c.documento()).isEqualTo("001");
         });
