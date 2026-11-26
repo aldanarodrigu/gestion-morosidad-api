@@ -6,6 +6,7 @@ import com.intendencia.gestion_morosidad_api.integration.intendencia.common.Inte
 import com.intendencia.gestion_morosidad_api.integration.intendencia.geopagos.dto.*;
 import com.intendencia.gestion_morosidad_api.integration.intendencia.geopat.dto.GeoPatContribuyenteDto;
 import java.time.LocalDate;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.ParameterizedTypeReference;
@@ -18,8 +19,24 @@ public class GeoPatClient implements IntendenciaClient {
     private final IntendenciaPaginador paginador;
 
     @Override public IntendenciaApiResponse<GeoPagosFacturaPendienteDto> obtenerFacturasPendientes(LocalDate desde, LocalDate hasta) {
-        return paginador.obtenerSinTotal("/api/v1/utec/sucive/facturas/pendientes", desde == null ? Map.of("fecha_corte", hasta.toString()) : Map.of("fecha_inicio", desde.toString(), "fecha_corte", hasta.toString()),
+        return paginador.obtenerSinTotal("/api/v1/utec/sucive/facturas/pendientes", periodo(desde, hasta),
                 new ParameterizedTypeReference<>() {}, GeoPagosFacturaPendienteDto::cm);
+    }
+
+    @Override
+    public IntendenciaApiResponse<GeoPagosFacturaPendienteDto> obtenerFacturasPendientesPorCm(
+            String cm, LocalDate desde, LocalDate hasta) {
+        var filtros = periodo(desde, hasta);
+        filtros.put("cm", cm);
+        return paginador.obtenerPorCm("/api/v1/utec/sucive/facturas/pendientes", filtros,
+                new ParameterizedTypeReference<>() {}, GeoPagosFacturaPendienteDto::cm);
+    }
+
+    private static Map<String, String> periodo(LocalDate desde, LocalDate hasta) {
+        var filtros = new LinkedHashMap<String, String>();
+        if (desde != null) filtros.put("fecha_inicio", desde.toString());
+        filtros.put("fecha_corte", hasta.toString());
+        return filtros;
     }
 
     @Override

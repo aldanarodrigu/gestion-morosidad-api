@@ -53,6 +53,16 @@ public final class SeguimientoSincronizacion implements AutoCloseable {
         actual.publicar(new ProgresoSincronizacion(etapa,0,null,registros,null,null,1,detalle));
     }
 
+    public static void verificandoPadrones(int completados, int total) {
+        comprobarCancelacion();
+        var actual = ACTUAL.get();
+        if (actual == null) return;
+        var p = actual.progreso;
+        actual.publicar(new ProgresoSincronizacion(p.etapa(), p.paginasDescargadas(), p.paginaActual(),
+                p.registrosDescargados(), p.totalRegistros(), p.totalPaginas(), 1,
+                "Verificando padrones ausentes de la descarga (" + completados + " de " + total + ")."));
+    }
+
     public static void solicitando(int pagina) {
         comprobarCancelacion();
         var actual = ACTUAL.get();

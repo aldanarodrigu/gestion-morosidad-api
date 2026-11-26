@@ -961,7 +961,7 @@ La cancelación y el comienzo de **Guardado** se coordinan atómicamente. Una ve
 
 En Configuracion > Sincronizacion se puede dejar el anio minimo vacio y guardar el periodo. El API acepta `{"anioMinimo":null}` (o el campo omitido) y persiste NULL, sin alterar el anio configurado al instalar la migracion `V202611161000__sincronizacion_sin_anio_minimo.sql`. Se aplica tanto a ejecuciones manuales como automaticas.
 
-Sin limite se omite `fecha_inicio`, se conserva `fecha_corte` y se envia `include_total=0` en todas las paginas y reintentos de pendientes. Las deudas antiguas recibidas vuelven a estar incluidas en cartera. La descarga completa conserva la conciliacion existente de cuentas ausentes y la proteccion contra respuestas vacias inesperadas. Guardar el periodo no inicia una sincronizacion ni modifica deudas.
+Sin límite se omite `fecha_inicio`, se conserva `fecha_corte` y se envía `include_total=0` en pendientes. Las deudas antiguas recibidas vuelven a incluirse en cartera. Antes de conciliar un padrón ausente que podría tener deuda dentro del período, el backend verifica sus pendientes por CM en el mismo origen e intervalo. Si el padrón sigue con deuda positiva o la confirmación falla, se aborta la sincronización y se conservan los datos anteriores. El último vencimiento conocido permite excluir de esta comprobación las deudas completamente anteriores al período seleccionado. Guardar el período se aplica en la próxima sincronización.
 
 ### Prueba de arranque aislada
 

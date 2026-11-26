@@ -3,6 +3,7 @@ package com.intendencia.gestion_morosidad_api.modules.deuda.repository;
 import com.intendencia.gestion_morosidad_api.modules.deuda.entity.Deuda;
 import com.intendencia.gestion_morosidad_api.modules.deuda.entity.EstadoDeuda;
 import com.intendencia.gestion_morosidad_api.shared.enums.OrigenDatos;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -60,6 +61,16 @@ public interface DeudaRepository extends JpaRepository<Deuda, Long>, JpaSpecific
     Optional<LocalDateTime> ultimaSincronizacionPorOrigen(OrigenDatos origen);
 
     long countByPadronOrigenAndEstadoNot(OrigenDatos origen, EstadoDeuda estado);
+
+    @Query("""
+            select d.padron.cm from Deuda d
+            where d.padron.origen = :origen and d.estado <> :estadoCancelado
+              and (:sinLimite = true or d.ultimoVencimiento is null
+                   or d.ultimoVencimiento >= :desde or d.deudaDesde >= :desde)
+            order by d.padron.cm
+            """)
+    List<String> listarCmConDeudasParaConciliar(OrigenDatos origen, EstadoDeuda estadoCancelado,
+                                               boolean sinLimite, LocalDate desde);
 
     @EntityGraph(attributePaths = "padron")
     @Query("select d from Deuda d where d.padron.origen = :origen")

@@ -41,6 +41,15 @@ import org.apache.poi.ss.usermodel.CellType;
 import org.apache.poi.ss.usermodel.WorkbookFactory;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullSource;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.client.MockRestServiceServer;
+import org.springframework.web.client.RestClient;
+import com.intendencia.gestion_morosidad_api.integration.intendencia.common.IntendenciaPaginador;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.queryParam;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -399,6 +408,91 @@ class SincronizacionCasosRealesPersistenciaTest {
         Deuda deuda = deuda("100201");
         assertThat(deuda.isEnPeriodoGestion()).isTrue();
         assertThat(deuda.getSegmentoMora()).isNotNull();
+    }
+
+    @ParameterizedTest
+    @NullSource
+    @ValueSource(ints = {2013, 2026})
+    void descargaTruncadaNoCambiaDeudasNiElSaldoDeCartera(Integer anioMinimo) throws Exception {
+        dia1();
+        var builder = RestClient.builder().baseUrl("https://test.invalid");
+        var servidor = MockRestServiceServer.bindTo(builder).build();
+        var cliente = new GeoPagosClient(new IntendenciaPaginador(builder.build(), 1000));
+        servidor.expect(queryParam("include_total", "0"))
+                .andRespond(withSuccess(paginaFinal("100201"), MediaType.APPLICATION_JSON));
+        servidor.expect(queryParam("cm", "100202"))
+                .andExpect(queryParam("include_total", "0"))
+                .andRespond(withSuccess(paginaFinal("100202"), MediaType.APPLICATION_JSON));
+        when(geoPagosClient.obtenerFacturasPendientes(any(), any()))
+                .thenAnswer(inv -> cliente.obtenerFacturasPendientes(inv.getArgument(0), inv.getArgument(1)));
+        when(geoPagosClient.obtenerFacturasPendientesPorCm(any(), any(), any()))
+                .thenAnswer(inv -> cliente.obtenerFacturasPendientesPorCm(
+                        inv.getArgument(0), inv.getArgument(1), inv.getArgument(2)));
+
+        assertThatThrownBy(() -> service.sincronizar(OrigenDatos.INTENDENCIA, anioMinimo))
+                .isInstanceOf(IntegracionExternaException.class)
+                .hasMessageContaining("CM 100202").hasMessageContaining("No se aplicaron cambios");
+
+        assertThat(deuda("100201").getImporte()).isEqualByComparingTo("15432.50");
+        assertThat(deuda("100202").getEstado()).isEqualTo(EstadoDeuda.EN_CONVENIO);
+        assertThat(deuda("100202").isEnPeriodoGestion()).isTrue();
+        assertThat(deuda("100203").isEnPeriodoGestion()).isTrue();
+        mvc.perform(get("/api/reportes/cartera").with(user("analista").roles("ANALISTA")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totales.deudas").value(3))
+                .andExpect(jsonPath("$.totales.importe").value(143432.50));
+        servidor.verify();
+    }
+
+    @ParameterizedTest
+    @NullSource
+    @ValueSource(ints = 2013)
+    void unaAusenciaConfirmadaPorCmPermiteConciliar(Integer anioMinimo) {
+        dia1();
+        respuestaDeLaApi("pendientes-dia2.json");
+        when(geoPagosClient.obtenerFacturasPendientesPorCm("100203",
+                anioMinimo == null ? null : LocalDate.of(anioMinimo, 1, 1), DIA_1))
+                .thenReturn(new IntendenciaApiResponse<>(List.of(), null));
+
+        service.sincronizar(OrigenDatos.INTENDENCIA, anioMinimo);
+        em.flush();
+        em.clear();
+        var ausente = deuda("100203");
+        assertThat(deuda("100201").getImporte()).isEqualByComparingTo("16010.75");
+        if (anioMinimo == null) {
+            assertThat(ausente.getEstado()).isEqualTo(EstadoDeuda.CANCELADA);
+        } else {
+            assertThat(ausente.getEstado()).isEqualTo(EstadoDeuda.PENDIENTE);
+            assertThat(ausente.isEnPeriodoGestion()).isFalse();
+        }
+    }
+
+    @Test
+    void alAcotarElPeriodoNoConsultaOtraVezDeudasConUltimoVencimientoAnterior() {
+        dia1();
+        jdbc.update("""
+                UPDATE deuda SET ultimo_vencimiento = DATE '2025-12-31'
+                WHERE padron_id IN (SELECT id FROM padrones WHERE cm = '100203')
+                """);
+        em.clear();
+        respuestaDeLaApi("periodo-pendientes.json");
+        when(geoPagosClient.obtenerFacturasPendientes(any(), any()))
+                .thenReturn(new IntendenciaApiResponse<>(pendientes("pendientes-dia1.json").subList(0, 2), null));
+
+        service.sincronizar(OrigenDatos.INTENDENCIA, 2026);
+        em.flush();
+        em.clear();
+        assertThat(deuda("100203").isEnPeriodoGestion()).isFalse();
+        org.mockito.Mockito.verify(geoPagosClient, org.mockito.Mockito.never())
+                .obtenerFacturasPendientesPorCm(any(), any(), any());
+    }
+
+    private String paginaFinal(String cm) {
+        return """
+                {"data":[{"CM":%s,"NUMERO_PADRON":"4567","IMPORTE_DEUDA":1000,"DEUDA_DESDE":"2026-03-10"}],
+                 "meta":{"current_page":1,"per_page":1000,"from":1,"to":1,
+                         "has_more":false,"total":null,"last_page":null}}
+                """.formatted(cm);
     }
 
     /** Con período, un saldo cero en la respuesta no debería rechazar el resto de la sincronización. */

@@ -7,6 +7,8 @@ import java.time.LocalDate;
 public interface IntendenciaClient {
     IntendenciaApiResponse<GeoPagosFacturaPendienteDto> obtenerFacturasPendientes();
     IntendenciaApiResponse<GeoPagosFacturaPendienteDto> obtenerFacturasPendientes(LocalDate desde, LocalDate hasta);
+    IntendenciaApiResponse<GeoPagosFacturaPendienteDto> obtenerFacturasPendientesPorCm(
+            String cm, LocalDate desde, LocalDate hasta);
     IntendenciaApiResponse<GeoPagosFacturaCanceladaDto> obtenerFacturasCanceladas(LocalDate desde, LocalDate hasta);
     IntendenciaApiResponse<GeoPagosContribuyenteDto> obtenerContribuyentes();
 }

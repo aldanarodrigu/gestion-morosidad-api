@@ -5,6 +5,7 @@ import com.intendencia.gestion_morosidad_api.integration.intendencia.geopagos.cl
 import com.intendencia.gestion_morosidad_api.integration.intendencia.geopagos.dto.GeoPagosContribuyenteDto;
 import com.intendencia.gestion_morosidad_api.integration.intendencia.geopagos.dto.GeoPagosFacturaCanceladaDto;
 import com.intendencia.gestion_morosidad_api.integration.intendencia.geopagos.dto.GeoPagosFacturaPendienteDto;
+import com.intendencia.gestion_morosidad_api.modules.deuda.entity.EstadoDeuda;
 import com.intendencia.gestion_morosidad_api.modules.deuda.repository.DeudaRepository;
 import com.intendencia.gestion_morosidad_api.modules.sincronizacion.dto.ResultadoSincronizacion;
 import com.intendencia.gestion_morosidad_api.shared.exception.IntegracionExternaException;
@@ -17,6 +18,8 @@ import com.intendencia.gestion_morosidad_api.shared.enums.OrigenDatos;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Objects;
+import java.util.stream.Collectors;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Supplier;
 import lombok.RequiredArgsConstructor;
@@ -67,7 +70,7 @@ public class SincronizacionDeudasService {
     }
 
     public ResultadoSincronizacion sincronizar(OrigenDatos origen, Integer anioMinimo) {
-        java.util.Objects.requireNonNull(origen);
+        Objects.requireNonNull(origen);
         IntendenciaClient client = origen == OrigenDatos.SUCIVE ? geoPatClient : geoPagosClient;
         if (usuarioApi == null || usuarioApi.isBlank()) {
             throw new IntegracionExternaException(
@@ -84,6 +87,7 @@ public class SincronizacionDeudasService {
             SeguimientoSincronizacion.etapa("DEUDAS",0);
             List<GeoPagosFacturaPendienteDto> pendientes =
                     consultar(origen, "facturas pendientes", () -> client.obtenerFacturasPendientes(inicioPeriodo, hoy));
+            verificarPadronesAusentes(client, origen, inicioPeriodo, hoy, pendientes);
 
             // Cobros desde la sincronización anterior (con un día de margen); fecha_hasta no se incluye
             LocalDate desde = deudaRepository.ultimaSincronizacionPorOrigen(origen)
@@ -110,6 +114,32 @@ public class SincronizacionDeudasService {
             return resultado;
         } finally {
             enCurso.set(false);
+        }
+    }
+
+    private void verificarPadronesAusentes(IntendenciaClient client, OrigenDatos origen, LocalDate desde,
+                                           LocalDate hasta, List<GeoPagosFacturaPendienteDto> pendientes) {
+        var recibidos = pendientes.stream().filter(Objects::nonNull)
+                .map(fila -> SincronizacionDeudasProcessor.texto(fila.cm()))
+                .collect(Collectors.toSet());
+        var ausentes = deudaRepository.listarCmConDeudasParaConciliar(origen, EstadoDeuda.CANCELADA, desde == null, desde)
+                .stream().filter(cm -> !recibidos.contains(cm)).toList();
+        if (ausentes.isEmpty()) return;
+        if (pendientes.isEmpty())
+            throw new IntegracionExternaException(origen.proveedor()
+                    + " no devolvió deudas pendientes para el período con deudas registradas; no se aplicaron cambios.");
+
+        for (int indice = 0; indice < ausentes.size(); indice++) {
+            String cm = ausentes.get(indice);
+            SeguimientoSincronizacion.verificandoPadrones(indice, ausentes.size());
+            var confirmacion = consultar(origen, "facturas pendientes del CM " + cm,
+                    () -> client.obtenerFacturasPendientesPorCm(cm, desde, hasta));
+            if (confirmacion.isEmpty()) continue;
+            var deuda = confirmacion.getFirst();
+            if (confirmacion.size() != 1 || deuda == null || !cm.equals(SincronizacionDeudasProcessor.texto(deuda.cm()))
+                    || deuda.importeDeuda() == null || deuda.importeDeuda().signum() > 0)
+                throw new IntegracionExternaException(origen.proveedor() + " devolvió una descarga de pendientes "
+                        + "inconsistente con la consulta del CM " + cm + ". No se aplicaron cambios.");
         }
     }
 

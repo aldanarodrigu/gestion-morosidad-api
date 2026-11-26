@@ -38,7 +38,7 @@ public class IntendenciaPaginador {
         Integer tamanioReal = null;
         Object parametrosRespuesta = null;
         for (int pagina = 1; pagina <= MAX_PAGINAS; pagina++) {
-            var respuesta = descargar(ruta,parametros,pagina,false,tipo);
+            var respuesta = descargar(ruta,parametros,pagina,false,tipo,true);
             if (respuesta == null || respuesta.getData() == null || respuesta.getMeta() == null)
                 throw incompleta(ruta, pagina, "faltan datos o metadatos de paginacion");
             var meta = respuesta.getMeta();
@@ -87,18 +87,33 @@ public class IntendenciaPaginador {
     /** La fuente puede omitir el COUNT costoso; has_more define el final. Nunca entrega páginas parciales al procesador. */
     public <T> IntendenciaApiResponse<T> obtenerSinTotal(String ruta, Map<String, ?> parametros,
             ParameterizedTypeReference<IntendenciaApiResponse<T>> tipo, Function<T, Object> identificadorUnico) {
+        return obtenerSinTotal(ruta, parametros, tipo, identificadorUnico, null);
+    }
+
+    public <T> IntendenciaApiResponse<T> obtenerPorCm(String ruta, Map<String, String> parametros,
+            ParameterizedTypeReference<IntendenciaApiResponse<T>> tipo, Function<T, Object> identificadorUnico) {
+        String cm = java.util.Objects.requireNonNull(parametros.get("cm"));
+        return obtenerSinTotal(ruta, parametros, tipo, identificadorUnico, cm);
+    }
+
+    private <T> IntendenciaApiResponse<T> obtenerSinTotal(String ruta, Map<String, ?> parametros,
+            ParameterizedTypeReference<IntendenciaApiResponse<T>> tipo, Function<T, Object> identificadorUnico,
+            String cmEsperado) {
+        boolean consultaIndividual = cmEsperado != null;
         var filas = new ArrayList<T>();
         Set<String> ids = new HashSet<>();
         Integer tamanioReal = null;
         Object parametrosRespuesta = null;
         for (int pagina=1; pagina<=MAX_PAGINAS; pagina++) {
-            var respuesta = descargar(ruta,parametros,pagina,true,tipo);
+            var respuesta = descargar(ruta,parametros,pagina,true,tipo,!consultaIndividual);
             if (respuesta == null || respuesta.getData() == null || respuesta.getMeta() == null)
                 throw incompleta(ruta,pagina,"faltan datos o metadatos");
             var m = respuesta.getMeta(); int cantidad = respuesta.getData().size();
             if (m.getCurrentPage() == null || m.getCurrentPage() != pagina || m.getPerPage() == null
                 || m.getPerPage() < 1 || m.getPerPage() > tamanioPagina || m.getHasMore() == null)
                 throw incompleta(ruta,pagina,"metadatos inválidos");
+            if (consultaIndividual && (cantidad > 1 || m.getHasMore()))
+                throw incompleta(ruta,pagina,"la consulta por CM devolvió más de una cuenta");
             if (tamanioReal == null) { tamanioReal=m.getPerPage(); parametrosRespuesta=m.getParameters(); }
             if (!tamanioReal.equals(m.getPerPage()) || cantidad>tamanioReal
                 || (m.getHasMore() && cantidad!=tamanioReal) || (pagina>1 && cantidad==0))
@@ -111,15 +126,19 @@ public class IntendenciaPaginador {
                 if (fila == null) throw incompleta(ruta,pagina,"fila vacía");
                 if (identificadorUnico != null) {
                     String id = normalizar(identificadorUnico.apply(fila));
+                    if (consultaIndividual && !cmEsperado.equals(id))
+                        throw incompleta(ruta,pagina,"la consulta devolvió un CM distinto al solicitado");
                     if (id == null || !ids.add(id)) throw incompleta(ruta,pagina,"identificador ausente o repetido");
                 }
                 filas.add(fila);
             }
             if (!m.getHasMore() && m.getTotal()!=null && m.getTotal()!=filas.size())
                 throw incompleta(ruta,pagina,"total inconsistente");
-            SeguimientoSincronizacion.pagina(pagina,filas.size(),m.getTotal(),m.getLastPage(),m.getHasMore());
-            if (pagina==1 || pagina%10==0 || !m.getHasMore())
-                log.info("API {}: página {}, {} registros descargados, quedan páginas: {}",ruta,pagina,filas.size(),m.getHasMore());
+            if (!consultaIndividual) {
+                SeguimientoSincronizacion.pagina(pagina,filas.size(),m.getTotal(),m.getLastPage(),m.getHasMore());
+                if (pagina==1 || pagina%10==0 || !m.getHasMore())
+                    log.info("API {}: página {}, {} registros descargados, quedan páginas: {}",ruta,pagina,filas.size(),m.getHasMore());
+            }
             if (!m.getHasMore()) {
                 return new IntendenciaApiResponse<>(filas,new IntendenciaApiMeta((long)filas.size(),parametrosRespuesta));
             }
@@ -128,8 +147,8 @@ public class IntendenciaPaginador {
     }
 
     private <T> IntendenciaApiResponse<T> descargar(String ruta, Map<String, ?> parametros, int pagina,
-            boolean omitirTotal, ParameterizedTypeReference<IntendenciaApiResponse<T>> tipo) {
-        SeguimientoSincronizacion.solicitando(pagina);
+            boolean omitirTotal, ParameterizedTypeReference<IntendenciaApiResponse<T>> tipo, boolean publicarAvance) {
+        if (publicarAvance) SeguimientoSincronizacion.solicitando(pagina);
         for (int intento=1; ; intento++) {
             SeguimientoSincronizacion.comprobarCancelacion();
             try {
@@ -151,7 +170,7 @@ public class IntendenciaPaginador {
                 if (intento>=3) throw e;
                 log.warn("API {}: fallo de conexión en página {}, reintento {}/2",ruta,pagina,intento);
             }
-            SeguimientoSincronizacion.reintentando(pagina,intento+1);
+            if (publicarAvance) SeguimientoSincronizacion.reintentando(pagina,intento+1);
             try { Thread.sleep(1000L*intento); }
             catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
