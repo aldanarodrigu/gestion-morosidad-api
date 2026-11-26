@@ -8,6 +8,11 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import tools.jackson.core.JsonParser;
+import tools.jackson.core.JsonToken;
+import tools.jackson.databind.DeserializationContext;
+import tools.jackson.databind.ValueDeserializer;
+import tools.jackson.databind.annotation.JsonDeserialize;
 @RestController
 @RequestMapping("/api/sincronizaciones")
 @RequiredArgsConstructor
@@ -15,7 +20,18 @@ import org.springframework.web.bind.annotation.*;
 public class ConfiguracionSincronizacionController {
     private final PeriodoSincronizacionService periodo;
     private final SincronizacionManualService manual;
-    public record Configuracion(Integer anioMinimo) {}
+    public record Configuracion(@JsonDeserialize(using = AnioMinimoEntero.class) Integer anioMinimo) {}
+
+    static final class AnioMinimoEntero extends ValueDeserializer<Integer> {
+        @Override
+        public Integer deserialize(JsonParser parser, DeserializationContext contexto) {
+            if (parser.hasToken(JsonToken.VALUE_NUMBER_FLOAT))
+                return contexto.reportInputMismatch(Integer.class, "El año mínimo debe ser un número entero.");
+            return contexto.readValue(parser, Integer.class);
+        }
+    }
+
+
     @GetMapping("/configuracion") public Configuracion obtener() { return new Configuracion(periodo.anioMinimo()); }
     @PutMapping("/configuracion") public Configuracion guardar(@Valid @RequestBody Configuracion config) {
         manual.guardar(config.anioMinimo()); return obtener();

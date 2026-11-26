@@ -918,7 +918,7 @@ La migración `V202611120000__facturas_anios_deuda.sql` agrega columnas opcional
 
 ### Período de sincronización y ejecución manual
 
-En **Configuración → Sincronización**, Administrador guarda el año mínimo (2013 inicialmente) e inicia la sincronización de Intendencia o SUCIVE. La configuración se persiste en la base y se utiliza tanto manualmente como en el proceso automático. Cambiar el año no cambia los saldos hasta completar una nueva sincronización de cada origen.
+En **Configuración → Sincronización**, Administrador guarda un año mínimo entero entre 1900 y el año actual (2013 inicialmente) o deja el campo vacío. Puede iniciar la sincronización de Intendencia o SUCIVE. La API rechaza los años decimales con HTTP 400. La configuración se persiste en la base y se utiliza tanto manualmente como en el proceso automático. Cambiar el año no cambia los saldos hasta completar una nueva sincronización de cada origen.
 
 El período corresponde a **vencimientos** desde el 01/01 del año elegido, incluido, hasta el día actual, excluido (`fecha_inicio`/`fecha_corte`). No equivale a filtrar por año de facturación. Se recorren todas las páginas con `include_total=0` y `meta.has_more`, validando páginas, tamaños, límites e identificadores. El COUNT externo se omite para evitar su coste, y la importación solo se aplica una vez completa la descarga. Una respuesta con vencimientos fuera de los límites se rechaza. Los campos opcionales vacíos o ausentes en pendientes conservan los datos existentes del padrón y la deuda. Se aplican los valores informados, incluidos los importes en cero, una lista válida de tributos y `SI` o `NO` para el convenio.
 

@@ -39,9 +39,22 @@ class ConfiguracionSincronizacionControllerTest {
   mvc.perform(post("/api/sincronizaciones/ejecucion").param("origen","SUCIVE").with(user("a").roles("ADMINISTRADOR"))).andExpect(status().isAccepted());verify(manual).iniciar(OrigenDatos.SUCIVE);
   mvc.perform(get("/api/sincronizaciones/ejecucion").with(user("a").roles("ADMINISTRADOR"))).andExpect(status().isNoContent());
  }
- @Test void anioAusentePermiteSinLimite() throws Exception {
-  mvc.perform(put("/api/sincronizaciones/configuracion").with(user("a").roles("ADMINISTRADOR")).contentType("application/json").content("{}"))
-   .andExpect(status().isOk());verify(manual).guardar(null);
+ @Test void anioVacioPermiteSinLimite() throws Exception {
+  for (String cuerpo : new String[]{"{}", "{\"anioMinimo\":null}"}) {
+   mvc.perform(put("/api/sincronizaciones/configuracion").with(user("a").roles("ADMINISTRADOR"))
+     .contentType("application/json").content(cuerpo))
+    .andExpect(status().isOk());
+  }
+  verify(manual, times(2)).guardar(null);
+ }
+
+ @Test void unNumeroDecimalSeRechazaAntesDeGuardarLaConfiguracion() throws Exception {
+  for (String valor : new String[]{"2013.75", "2013.0", "2.01375e3", "\"2013.75\""}) {
+   mvc.perform(put("/api/sincronizaciones/configuracion").with(user("a").roles("ADMINISTRADOR"))
+     .contentType("application/json").content("{\"anioMinimo\":" + valor + "}"))
+    .andExpect(status().isBadRequest());
+  }
+  verifyNoInteractions(manual);
  }
  @Test void exponeAvanceValidadoSinInventarUnTotal() throws Exception {
   var p = new com.intendencia.gestion_morosidad_api.integration.intendencia.common.ProgresoSincronizacion("DEUDAS",55,56,55000,null,null,3,"Reintentando página 56");
