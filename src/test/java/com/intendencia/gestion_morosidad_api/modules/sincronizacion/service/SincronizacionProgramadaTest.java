@@ -6,6 +6,8 @@ import com.intendencia.gestion_morosidad_api.shared.exception.OperacionEnCursoEx
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.scheduling.annotation.ScheduledAnnotationBeanPostProcessor;
 import org.springframework.scheduling.config.CronTask;
@@ -22,8 +24,12 @@ import static org.mockito.Mockito.*;
 
 class SincronizacionProgramadaTest {
 
+    @TestConfiguration(proxyBeanMethods = false)
+    @EnableScheduling
+    static class PlanificacionDePrueba {}
+
     private final ApplicationContextRunner contexto = new ApplicationContextRunner()
-            .withUserConfiguration(SincronizacionProgramada.class)
+            .withUserConfiguration(PlanificacionDePrueba.class, SincronizacionProgramada.class)
             .withBean(SincronizacionDeudasService.class, () -> mock(SincronizacionDeudasService.class));
 
     @Test
@@ -77,14 +83,14 @@ class SincronizacionProgramadaTest {
                         "sincronizacion.automatica.habilitada=true",
                         "sincronizacion.automatica.cron=0 30 4 * * *")
                 .run(ctx -> assertThat(cronesProgramados(ctx.getBean(ScheduledAnnotationBeanPostProcessor.class)))
-                        .containsExactly("0 30 4 * * *"));
+                        .containsExactlyInAnyOrder("0 30 4 * * *", "0 0 22 L * *"));
     }
 
     @Test
     void sinCronConfiguradoCorreALasTresDeLaMananaDeUruguay() throws Exception {
         contexto.withPropertyValues("sincronizacion.automatica.habilitada=true")
                 .run(ctx -> assertThat(cronesProgramados(ctx.getBean(ScheduledAnnotationBeanPostProcessor.class)))
-                        .containsExactly("0 0 3 * * *"));
+                        .containsExactlyInAnyOrder("0 0 3 * * *", "0 0 22 L * *"));
 
         Scheduled anotacion = SincronizacionProgramada.class.getMethod("ejecutar").getAnnotation(Scheduled.class);
         assertThat(anotacion.zone()).isEqualTo("America/Montevideo");
@@ -93,6 +99,16 @@ class SincronizacionProgramadaTest {
         var despuesDeLasTres = ZonedDateTime.of(LocalDateTime.of(2026, 11, 17, 3, 0, 1), zona);
         assertThat(CronExpression.parse("0 0 3 * * *").next(despuesDeLasTres))
                 .isEqualTo(ZonedDateTime.of(LocalDateTime.of(2026, 11, 18, 3, 0), zona));
+    }
+
+    @Test
+    void elCierreSeProgramaLaNocheDelUltimoDiaDeCadaMes() throws Exception {
+        var tarea = SincronizacionProgramada.class.getMethod("ejecutarCierreMensual").getAnnotation(Scheduled.class);
+        assertThat(tarea.zone()).isEqualTo("America/Montevideo");
+        var zona = ZoneId.of(tarea.zone());
+        var cron = CronExpression.parse("0 0 22 L * *");
+        assertThat(cron.next(LocalDateTime.of(2027, 2, 27, 22, 0).atZone(zona)))
+                .isEqualTo(LocalDateTime.of(2027, 2, 28, 22, 0).atZone(zona));
     }
 
     private static java.util.List<String> cronesProgramados(ScheduledAnnotationBeanPostProcessor procesador) {

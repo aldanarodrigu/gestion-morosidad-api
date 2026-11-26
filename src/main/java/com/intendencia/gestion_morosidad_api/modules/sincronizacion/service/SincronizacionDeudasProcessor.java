@@ -15,6 +15,7 @@ import com.intendencia.gestion_morosidad_api.modules.deuda.entity.EstadoDeuda;
 import com.intendencia.gestion_morosidad_api.modules.deuda.repository.DeudaRepository;
 import com.intendencia.gestion_morosidad_api.modules.padron.entity.Padron;
 import com.intendencia.gestion_morosidad_api.modules.padron.repository.PadronRepository;
+import com.intendencia.gestion_morosidad_api.modules.reporte.EvolucionMensualRepository;
 import com.intendencia.gestion_morosidad_api.modules.segmento.service.ConfiguracionSegmentoService;
 import com.intendencia.gestion_morosidad_api.modules.segmento.service.ReglasSegmentacion;
 import com.intendencia.gestion_morosidad_api.modules.sincronizacion.dto.ResultadoSincronizacion;
@@ -60,6 +61,7 @@ class SincronizacionDeudasProcessor {
     private final TributoRepository tributoRepository;
     private final ConfiguracionSegmentoService configuracionSegmentoService;
     private final CancelacionRepository cancelacionRepository;
+    private final EvolucionMensualRepository evolucionMensualRepository;
     private final Clock clock;
 
     @Transactional
@@ -142,6 +144,11 @@ class SincronizacionDeudasProcessor {
         padronRepository.saveAll(ctx.padronesNuevos);
         deudaRepository.saveAll(ctx.deudasNuevas);
         sincronizacionContactosService.sincronizar(ctx.contactosPendientes);
+        if (hoy.getDayOfMonth() == hoy.lengthOfMonth()) {
+            // El cierre lee el saldo ya actualizado dentro de esta misma transacción.
+            deudaRepository.flush();
+            evolucionMensualRepository.guardarCierre(hoy, origen, LocalDateTime.now(clock), anioMinimo);
+        }
 
         ResultadoSincronizacion resultado = new ResultadoSincronizacion(
                 inicio, LocalDateTime.now(clock), pendientes.size(), canceladas.size(),

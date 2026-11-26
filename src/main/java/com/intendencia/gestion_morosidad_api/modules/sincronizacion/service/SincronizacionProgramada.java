@@ -19,6 +19,11 @@ public class SincronizacionProgramada {
 
     private final SincronizacionDeudasService sincronizacionDeudasService;
 
+    @Scheduled(cron = "${sincronizacion.cierre-mensual.cron:0 0 22 L * *}", zone = "America/Montevideo")
+    public void ejecutarCierreMensual() {
+        ejecutar();
+    }
+
     @Scheduled(cron = "${sincronizacion.automatica.cron:0 0 3 * * *}", zone = "America/Montevideo")
     public void ejecutar() {
         for (OrigenDatos origen : OrigenDatos.values()) {

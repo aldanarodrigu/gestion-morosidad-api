@@ -9,6 +9,13 @@ import com.intendencia.gestion_morosidad_api.modules.segmento.repository.Segment
 import com.intendencia.gestion_morosidad_api.shared.enums.OrigenDatos;
 import jakarta.persistence.EntityManager;
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.LocalDate;
+import java.time.YearMonth;
+import java.util.List;
+import com.intendencia.gestion_morosidad_api.modules.cancelacion.Cancelacion;
+import com.intendencia.gestion_morosidad_api.modules.cancelacion.CancelacionRepository;
+import org.springframework.jdbc.core.JdbcTemplate;
 import java.io.ByteArrayInputStream;
 import org.apache.poi.ss.usermodel.*;
 import org.junit.jupiter.api.Test;
@@ -30,6 +37,10 @@ class ReportePersistenciaTest {
   r.add("spring.datasource.password",()->System.getenv("REPORTE_TEST_DB_PASSWORD"));
  }
  @Autowired ReporteService service;
+ @Autowired EvolucionMensualRepository evolucion;
+ @Autowired CancelacionRepository cancelaciones;
+ @Autowired JdbcTemplate jdbc;
+ @Autowired Clock clock;
  @Autowired ContribuyenteRepository personas;
  @Autowired PadronRepository padrones;
  @Autowired DeudaRepository deudas;
@@ -77,10 +88,63 @@ class ReportePersistenciaTest {
   em.flush(); var r=service.consultar(null,null,null);
   assertEquals(35,r.totales().padrones());assertEquals(0,new BigDecimal("730.30").compareTo(r.totales().importe()));
  }
+ @Test void evolucionaPorOrigenSinDuplicarCobrosNiConfundirCierresAusentesConCero() {
+  var hoy = LocalDate.now(clock);
+  var finMesAnterior = YearMonth.from(hoy).minusMonths(1).atEndOfMonth();
+  var cierre = finMesAnterior.atTime(22, 20);
+  var intendencia = OrigenDatos.INTENDENCIA;
+  var sucive = OrigenDatos.SUCIVE;
+  var segmento = segmentos.findAllByOrderByOrdenAsc().getFirst().getId();
+
+  evolucion.guardarCierre(finMesAnterior, intendencia, cierre, 2013);
+  evolucion.guardarCierre(finMesAnterior, intendencia, cierre.plusMinutes(5), 2013);
+  evolucion.guardarCierre(finMesAnterior, intendencia, cierre, null);
+  jdbc.update("UPDATE deuda SET importe=120.10 WHERE importe=100.10");
+  cancelaciones.guardar(List.of(
+    cobro(intendencia, "1", "100", finMesAnterior, "50.00", "PAGO"),
+    cobro(intendencia, "2", "100", finMesAnterior, "50.00", " pago "),
+    cobro(sucive, "1", "100", finMesAnterior, "40.00", "PAGO"),
+    cobro(intendencia, "1", "101", finMesAnterior, "900.00", "ANULADA"),
+    cobro(intendencia, "1", "102", hoy, "10.00", "PAGO"),
+    cobro(intendencia, "1", "103", hoy.plusDays(1), "99.00", "PAGO")
+  ));
+
+  var filas = service.consultar(null, " CIU ", segmento).evolucionMensual();
+  assertEquals(4, filas.size());
+  var actual = filas.get(0);
+  assertTrue(actual.enCurso());
+  assertEquals(0, new BigDecimal("120.10").compareTo(actual.saldoPendiente()));
+  assertEquals(0, new BigDecimal("10.00").compareTo(actual.importePagos()));
+  var cerrado = filas.get(2);
+  assertFalse(cerrado.enCurso());
+  assertEquals(cierre.plusMinutes(5), cerrado.corte());
+  assertEquals(2013, cerrado.anioMinimo());
+  assertEquals(0, new BigDecimal("100.10").compareTo(cerrado.saldoPendiente()));
+  assertEquals(1, cerrado.cantidadPagos());
+  assertEquals(0, new BigDecimal("50.00").compareTo(cerrado.importePagos()));
+  var otroOrigen = filas.get(3);
+  assertEquals(sucive, otroOrigen.origen());
+  assertNull(otroOrigen.corte());
+  assertNull(otroOrigen.saldoPendiente());
+  assertEquals(1, otroOrigen.cantidadPagos());
+  assertEquals(0, new BigDecimal("40.00").compareTo(otroOrigen.importePagos()));
+
+  var soloIntendencia = service.consultar(intendencia, "PAT", null).evolucionMensual();
+  assertEquals(2, soloIntendencia.size());
+  assertEquals(0, soloIntendencia.getLast().saldoPendiente().signum());
+  assertEquals(1, soloIntendencia.getLast().cantidadPagos());
+ }
+
+ private Cancelacion cobro(OrigenDatos origen, String cm, String numero, LocalDate fecha,
+                            String importe, String motivo) {
+  return new Cancelacion(null, origen, cm, numero, null, null, null, fecha,
+          new BigDecimal(importe), motivo, fecha.atTime(23,0));
+ }
+
  @Test void exportaExcelRealConLosMismosFiltrosYTotales() throws Exception {
   var bytes=service.exportar(OrigenDatos.SUCIVE,"PAT",null);
   try(var wb=WorkbookFactory.create(new ByteArrayInputStream(bytes))){
-   assertEquals(5,wb.getNumberOfSheets());
+   assertEquals(6,wb.getNumberOfSheets());
    var resumen=wb.getSheet("Resumen");assertEquals(200.20,resumen.getRow(5).getCell(1).getNumericCellValue(),0.001);
    assertEquals("SUCIVE",wb.getSheet("Por origen y PadTipo").getRow(1).getCell(0).getStringCellValue());
    assertEquals(1,wb.getSheet("Por origen y PadTipo").getLastRowNum());

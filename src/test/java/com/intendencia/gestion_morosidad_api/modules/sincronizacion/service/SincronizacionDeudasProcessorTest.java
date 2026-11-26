@@ -3,11 +3,15 @@ package com.intendencia.gestion_morosidad_api.modules.sincronizacion.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.intendencia.gestion_morosidad_api.modules.cancelacion.CancelacionRepository;
+import com.intendencia.gestion_morosidad_api.modules.reporte.EvolucionMensualRepository;
 import com.intendencia.gestion_morosidad_api.integration.intendencia.geopagos.dto.GeoPagosFacturaCanceladaDto;
 import com.intendencia.gestion_morosidad_api.integration.intendencia.geopagos.dto.GeoPagosContribuyenteDto;
 import com.intendencia.gestion_morosidad_api.integration.intendencia.geopagos.dto.GeoPagosFacturaPendienteDto;
@@ -56,12 +60,29 @@ class SincronizacionDeudasProcessorTest {
     private SincronizacionDeudasProcessor processor;
 
     @Mock CancelacionRepository cancelaciones;
+    @Mock EvolucionMensualRepository evolucionMensual;
+
+    @Test
+    void realizaElCierreSoloAlFinalDelMesDespuesDeGuardarLaCartera() {
+        when(configuracionSegmentoService.reglasVigentes()).thenReturn(new ReglasSegmentacion(List.of()));
+        var antes = LocalDate.of(2026, 9, 29);
+        var ultimoDia = antes.plusDays(1);
+        var origen = OrigenDatos.INTENDENCIA;
+
+        processor.procesar(List.of(), List.of(), List.of(), antes, antes.atTime(22, 0), origen, 2013);
+        verifyNoInteractions(evolucionMensual);
+
+        processor.procesar(List.of(), List.of(), List.of(), ultimoDia, ultimoDia.atTime(22, 0), origen, 2013);
+        var orden = inOrder(deudaRepository, evolucionMensual);
+        orden.verify(deudaRepository).flush();
+        orden.verify(evolucionMensual).guardarCierre(eq(ultimoDia), eq(origen), any(), eq(2013));
+    }
 
     @BeforeEach void prepararReloj() {
         processor = new SincronizacionDeudasProcessor(deudaRepository, padronRepository,
                 contribuyenteRepository, sincronizacionContactosService, tributoRepository,
                 configuracionSegmentoService,
-                cancelaciones, Clock.fixed(Instant.parse("2026-09-24T15:00:00Z"), ZoneId.of("America/Montevideo")));
+                cancelaciones, evolucionMensual, Clock.fixed(Instant.parse("2026-09-24T15:00:00Z"), ZoneId.of("America/Montevideo")));
     }
 
     static java.util.stream.Stream<org.junit.jupiter.params.provider.Arguments> padronesIncompletos() {

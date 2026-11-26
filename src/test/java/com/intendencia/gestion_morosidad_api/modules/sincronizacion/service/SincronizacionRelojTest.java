@@ -1,6 +1,8 @@
 package com.intendencia.gestion_morosidad_api.modules.sincronizacion.service;
 
 import com.intendencia.gestion_morosidad_api.integration.intendencia.geopagos.dto.GeoPagosFacturaPendienteDto;
+import com.intendencia.gestion_morosidad_api.modules.cancelacion.CancelacionRepository;
+import com.intendencia.gestion_morosidad_api.modules.reporte.EvolucionMensualRepository;
 import com.intendencia.gestion_morosidad_api.modules.contacto.service.SincronizacionContactosService;
 import com.intendencia.gestion_morosidad_api.modules.contribuyente.repository.ContribuyenteRepository;
 import com.intendencia.gestion_morosidad_api.modules.deuda.entity.Deuda;
@@ -36,6 +38,8 @@ class SincronizacionRelojTest {
             contexto.registerBean(SincronizacionContactosService.class, () -> mock(SincronizacionContactosService.class));
             contexto.registerBean(TributoRepository.class, () -> mock(TributoRepository.class));
             contexto.registerBean(ConfiguracionSegmentoService.class, () -> segmentos);
+            contexto.registerBean(CancelacionRepository.class, () -> mock(CancelacionRepository.class));
+            contexto.registerBean(EvolucionMensualRepository.class, () -> mock(EvolucionMensualRepository.class));
             contexto.registerBean(SincronizacionDeudasProcessor.class);
             contexto.refresh();
             LocalDateTime inicio = LocalDateTime.now(reloj);

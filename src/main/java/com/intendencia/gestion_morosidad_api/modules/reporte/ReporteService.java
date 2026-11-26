@@ -53,6 +53,17 @@ public class ReporteService {
             }
             var grupos=hoja(wb,"Por origen y PadTipo",cab,"Origen","PadTipo","Contribuyentes","Padrones","Importe","% del total");
             for(var g:r.resumen()) fila(grupos,monto,g.origen().equals("SUCIVE") ? "SUCIVE" : "Intendencia",g.tipo() == null ? "Sin PadTipo" : g.tipo(),g.personas(),g.cantidad(),g.importe(),proporcion(g.importe(),r.totales().importe())).getCell(5).setCellStyle(porcentaje);
+            var evolucion = hoja(wb, "Evolución mensual", cab, "Mes", "Origen", "Estado", "Corte",
+                    "Año mínimo de deuda al cierre", "Saldo pendiente (con filtros)", "Cantidad de pagos registrados",
+                    "Importe de pagos registrados (por origen)");
+            for (var mes : r.evolucionMensual()) {
+                var registro = fila(evolucion, monto, YearMonth.from(mes.mes()), mes.origen() == OrigenDatos.SUCIVE ? "SUCIVE" : "Intendencia",
+                        mes.estadoCorte(), null, mes.anioMinimo(), mes.saldoPendiente(), mes.cantidadPagos(), mes.importePagos());
+                if (mes.corte() != null && !mes.enCurso()) {
+                    registro.getCell(3).setCellValue(mes.corte());
+                    registro.getCell(3).setCellStyle(fecha);
+                }
+            }
             var bandas = new HashMap<Short,CellStyle>();
             for(var s:wb) {
                 s.getRow(0).setHeightInPoints(26);

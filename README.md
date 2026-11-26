@@ -815,11 +815,21 @@ prueba ni carga una página para calcular los totales en el navegador.
   filtros, resumen, distribución por mora, por PadTipo, por origen y desglose por origen/PadTipo.
   Importes, cantidades y porcentajes se guardan como valores numéricos.
 - Administrador, Notificador y Analista tienen acceso a consulta. La exportación requiere Analista, solo o combinado con otros roles. Criterio pendiente de validación con el cliente.
-- No requiere nuevas tablas ni migraciones. No llama a GeoPagos ni a SUCIVE.
+- Los reportes consultan la base local. Flyway crea las tablas de cierres mensuales al
+  iniciar el backend actualizado.
 - La fecha de generación no es una fecha de sincronización. Para actualizar los datos
   externos se debe ejecutar la sincronización correspondiente.
-- Evolución mensual, recaudación completa y clasificación urbano/rural siguen pendientes
-  de los datos y definiciones correspondientes. No se calculan a partir del último cobro.
+- **Evolución mensual y recaudación** muestra hasta 12 meses por origen. El mes en curso usa
+  el saldo actual. Los meses anteriores muestran el saldo guardado al cierre y distinguen
+  un origen sin cierre de un saldo cero. Los filtros de PadTipo y mora se aplican al saldo.
+- El cierre se guarda al sincronizar correctamente el último día del mes, en la misma
+  transacción y con un único cierre por mes y origen. Si la sincronización automática está
+  habilitada, también se ejecuta ese día a las 22:00 de Uruguay. El horario se puede cambiar
+  con `SINCRONIZACION_CIERRE_MENSUAL_CRON`.
+- Los pagos registrados se cuentan por mes de cobro y origen, usando el motivo `PAGO`
+  y un único registro por número de cobro y origen. La cobertura depende del historial que
+  devolvió el proveedor. La recaudación completa y la clasificación urbano/rural quedan
+  pendientes. El Excel incluye la hoja **Evolución mensual** con las mismas filas.
 
 `ReportePersistenciaTest` prueba totales, filtros, valores faltantes y XLSX contra una
 base PostgreSQL desechable configurada con `REPORTE_TEST_DB_URL`,

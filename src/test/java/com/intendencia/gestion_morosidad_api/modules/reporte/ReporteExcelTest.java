@@ -14,9 +14,16 @@ class ReporteExcelTest {
    new ReporteCartera.Totales(new BigDecimal("100"),2,2,2),
    List.of(new ReporteCartera.Segmento(1L,"Mora Temprana",1,1,new BigDecimal("25"))),
    List.of(new ReporteCartera.Tipo("=SUM(A1:A2)",1,new BigDecimal("25"))),
-   List.of(new ReporteCartera.Grupo("SUCIVE","PAT",2,2,new BigDecimal("100")))));
+   List.of(new ReporteCartera.Grupo("SUCIVE","PAT",2,2,new BigDecimal("100"))),
+   List.of(new EvolucionMensualCartera(LocalDate.of(2026,11,1),
+     com.intendencia.gestion_morosidad_api.shared.enums.OrigenDatos.SUCIVE,true,null,null,
+     new BigDecimal("100"),2,new BigDecimal("10.50")))));
   try(var wb=WorkbookFactory.create(new ByteArrayInputStream(service.exportar(null,null,null)))){
-   assertEquals(5,wb.getNumberOfSheets());
+   assertEquals(6,wb.getNumberOfSheets());
+   var evolucion = wb.getSheet("Evolución mensual").getRow(1);
+   assertEquals("2026-11",evolucion.getCell(0).getStringCellValue());
+   assertEquals(100,evolucion.getCell(5).getNumericCellValue());
+   assertEquals(10.50,evolucion.getCell(7).getNumericCellValue());
    assertEquals(0.25,wb.getSheet("Por mora").getRow(1).getCell(3).getNumericCellValue(),0.0001);
    assertEquals(1,wb.getSheet("Por origen y PadTipo").getRow(1).getCell(5).getNumericCellValue(),0.0001);
    assertEquals(CellType.STRING,wb.getSheet("Por PadTipo").getRow(1).getCell(0).getCellType());
@@ -25,7 +32,7 @@ class ReporteExcelTest {
  }
  @Test void exportaReporteVacioSinFilasInventadas() throws Exception {
   var repo=mock(ReporteRepository.class);var service=new ReporteService(repo,Clock.systemUTC());
-  when(repo.consultar(any(),any(),any(),any())).thenReturn(new ReporteCartera(LocalDateTime.now(),new ReporteCartera.Totales(BigDecimal.ZERO,0,0,0),List.of(),List.of(),List.of()));
+  when(repo.consultar(any(),any(),any(),any())).thenReturn(new ReporteCartera(LocalDateTime.now(),new ReporteCartera.Totales(BigDecimal.ZERO,0,0,0),List.of(),List.of(),List.of(),List.of()));
   try(var wb=WorkbookFactory.create(new ByteArrayInputStream(service.exportar(null,null,null)))){
    assertEquals(0,wb.getSheet("Por mora").getLastRowNum());assertEquals(0,wb.getSheet("Por PadTipo").getLastRowNum());
   }
@@ -36,7 +43,7 @@ class ReporteExcelTest {
    new ReporteCartera.Totales(new BigDecimal("100"),1,5,5),List.of(),List.of(),
    List.of(new ReporteCartera.Grupo("INTENDENCIA","CIU",1,2,new BigDecimal("25")),
     new ReporteCartera.Grupo("INTENDENCIA","CIR",1,1,new BigDecimal("35")),
-    new ReporteCartera.Grupo("SUCIVE","PAT",1,2,new BigDecimal("40")))));
+    new ReporteCartera.Grupo("SUCIVE","PAT",1,2,new BigDecimal("40"))),List.of()));
   try(var wb=WorkbookFactory.create(new ByteArrayInputStream(service.exportar(null,null,null)))) {
    var hoja=wb.getSheet("Por origen");
    assertEquals(2,hoja.getLastRowNum());

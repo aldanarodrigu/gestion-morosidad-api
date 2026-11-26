@@ -11,10 +11,12 @@ import org.springframework.stereotype.Repository;
 @RequiredArgsConstructor
 public class ReporteRepository {
     private final JdbcTemplate jdbc;
+    private final EvolucionMensualRepository evolucionMensual;
+    static final String CARTERA_VIGENTE = "d.en_periodo_gestion = true AND d.estado <> 'CANCELADA' AND d.importe > 0 ";
     private static final String PERSONA = "CASE WHEN nullif(trim(c.documento),'') IS NOT NULL THEN 'DOC:' || trim(c.documento) ELSE 'ID:' || c.id::text END";
     private static final String TIPO = "nullif(trim(p.tipo_padron),'')";
     public ReporteCartera consultar(OrigenDatos origen, String tipoPadron, Long segmento, LocalDateTime generado) {
-        String from = " FROM deuda d JOIN padrones p ON p.id=d.padron_id JOIN contribuyentes c ON c.id=p.contribuyente_id LEFT JOIN segmentos_mora s ON s.id=d.segmento_mora_id WHERE d.en_periodo_gestion = true AND d.estado <> 'CANCELADA' AND d.importe > 0";
+        String from = " FROM deuda d JOIN padrones p ON p.id=d.padron_id JOIN contribuyentes c ON c.id=p.contribuyente_id LEFT JOIN segmentos_mora s ON s.id=d.segmento_mora_id WHERE " + CARTERA_VIGENTE;
         var args = new ArrayList<Object>();
         if (origen != null) { from += " AND p.origen=?"; args.add(origen.name()); }
         if (tipoPadron != null && !tipoPadron.isBlank()) { from += " AND trim(p.tipo_padron)=?"; args.add(tipoPadron.trim()); }
@@ -28,6 +30,7 @@ public class ReporteRepository {
             (r,n) -> new Tipo(r.getString("tipo"),r.getLong("cantidad"),r.getBigDecimal("importe")),parametros);
         var grupos = jdbc.query("SELECT p.origen," + TIPO + " AS tipo,count(distinct " + PERSONA + ") AS personas,count(distinct p.id) AS cantidad,sum(d.importe) AS importe" + from + " GROUP BY p.origen," + TIPO + " ORDER BY p.origen,tipo NULLS LAST",
             (r,n) -> new Grupo(r.getString("origen"),r.getString("tipo"),r.getLong("personas"),r.getLong("cantidad"),r.getBigDecimal("importe")),parametros);
-        return new ReporteCartera(generado,totales,segmentos,tipos,grupos);
+        var evolucion = evolucionMensual.consultar(origen, tipoPadron, segmento, generado.toLocalDate(), grupos);
+        return new ReporteCartera(generado,totales,segmentos,tipos,grupos,evolucion);
     }
 }

@@ -8,6 +8,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.intendencia.gestion_morosidad_api.modules.cancelacion.CancelacionRepository;
+import com.intendencia.gestion_morosidad_api.modules.reporte.EvolucionMensualRepository;
 import com.intendencia.gestion_morosidad_api.integration.intendencia.geopagos.dto.GeoPagosContribuyenteDto;
 import com.intendencia.gestion_morosidad_api.integration.intendencia.geopagos.dto.GeoPagosFacturaCanceladaDto;
 import com.intendencia.gestion_morosidad_api.integration.intendencia.geopagos.dto.GeoPagosFacturaPendienteDto;
@@ -74,11 +75,14 @@ class SincronizacionDeudasProcessorReglasTest {
 
     @Mock CancelacionRepository cancelaciones;
 
+    @Mock EvolucionMensualRepository evolucionMensual;
+
     @BeforeEach
     void preparar() {
         processor = new SincronizacionDeudasProcessor(deudaRepository, padronRepository,
                 contribuyenteRepository, contactos, tributoRepository, configuracionSegmentoService,
-                cancelaciones, Clock.fixed(Instant.parse("2026-09-24T15:00:00Z"), ZoneId.of("America/Montevideo")));
+                cancelaciones, evolucionMensual,
+                Clock.fixed(Instant.parse("2026-09-24T15:00:00Z"), ZoneId.of("America/Montevideo")));
         when(configuracionSegmentoService.reglasVigentes()).thenReturn(reglasBase());
     }
 
