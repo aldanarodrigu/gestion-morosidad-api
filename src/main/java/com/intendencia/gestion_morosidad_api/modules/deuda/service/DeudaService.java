@@ -26,7 +26,9 @@ import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.event.EventListener;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -50,9 +52,18 @@ public class DeudaService {
             DeudaFiltro filtro,
             Pageable pageable
     ) {
-        var pagina = deudaRepository.findAll(DeudaSpecifications.conFiltro(filtro), pageable);
+        var pagina = deudaRepository.findAll(DeudaSpecifications.conFiltro(filtro), conDesempate(pageable));
         return new PaginaResponse<>(mapearDeudas(pagina.getContent()), pagina.getNumber(),
                 pagina.getSize(), pagina.getTotalElements(), pagina.getTotalPages());
+    }
+
+    // desempate por id, si no al paginar se repiten o faltan deudas con la misma fecha
+    static Pageable conDesempate(Pageable pageable) {
+        if (pageable.isUnpaged() || pageable.getSort().getOrderFor("id") != null) {
+            return pageable;
+        }
+        return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(),
+                pageable.getSort().and(Sort.by("id")));
     }
 
     /** Enriquecimiento compartido para la cartera individual y agrupada, en consultas por lote. */
