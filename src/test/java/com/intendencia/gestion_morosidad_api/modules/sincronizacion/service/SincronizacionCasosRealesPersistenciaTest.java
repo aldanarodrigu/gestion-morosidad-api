@@ -594,6 +594,31 @@ class SincronizacionCasosRealesPersistenciaTest {
                 """, 2013);
     }
 
+    @Test
+    void sinAnioMinimoImportaUnaDeudaConVencimientoParcialComoDesconocido() {
+        sincronizarFila("""
+                {"CM":100202,"NUMERO_PADRON":4567,"IMPORTE_DEUDA":1000,
+                 "DEUDA_DESDE":"2000-00-30","ULTIMO_VENCIMIENTO":"2000-00-30"}
+                """, null);
+
+        var deuda = deuda("100202");
+        assertThat(deuda.getImporte()).isEqualByComparingTo("1000");
+        assertThat(deuda.isEnPeriodoGestion()).isTrue();
+        assertThat(deuda.getDeudaDesde()).isNull();
+        assertThat(deuda.getUltimoVencimiento()).isNull();
+        assertThat(deuda.getSegmentoMora()).isNull();
+    }
+
+    @Test
+    void conAnioMinimoNoAsumeQueUnVencimientoParcialEstaDentroDelPeriodo() {
+        assertThatThrownBy(() -> sincronizarFila("""
+                {"CM":100202,"NUMERO_PADRON":4567,"IMPORTE_DEUDA":1000,
+                 "DEUDA_DESDE":"2000-00-30"}
+                """, 2013))
+                .isInstanceOf(IntegracionExternaException.class)
+                .hasMessageContaining("vencimientos fuera del período");
+    }
+
     private void sincronizarFila(String cuerpo, Integer anioMinimo) {
         var fila = json.readValue(cuerpo, GeoPagosFacturaPendienteDto.class);
         var pendientes = new IntendenciaApiResponse<>(List.of(fila), null);

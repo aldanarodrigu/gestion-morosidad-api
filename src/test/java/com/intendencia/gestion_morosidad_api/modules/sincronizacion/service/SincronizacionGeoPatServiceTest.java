@@ -16,6 +16,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.converter.HttpMessageConversionException;
+import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.HttpServerErrorException;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.*;
@@ -101,6 +103,17 @@ class SincronizacionGeoPatServiceTest {
         when(geoPatClient.obtenerContribuyentes()).thenReturn(null);
         service.sincronizar(OrigenDatos.SUCIVE);
         verify(processor).procesar(eq(List.of()), eq(List.of()), isNull(), any(), any(), eq(OrigenDatos.SUCIVE), eq(2013));
+    }
+
+    @Test
+    void distingueUnFormatoInvalidoDeUnFalloDeConexion() {
+        when(geoPatClient.obtenerFacturasPendientes(any(), any())).thenThrow(
+                new RestClientException("Error al leer la respuesta", new HttpMessageConversionException("Formato inválido")));
+
+        assertThatThrownBy(() -> service.sincronizar(OrigenDatos.SUCIVE))
+                .isInstanceOf(IntegracionExternaException.class)
+                .hasMessageContaining("GeoPat devolvió datos inválidos al consultar facturas pendientes");
+        verifyNoInteractions(processor);
     }
 
     @Test void evitaSincronizacionesSimultaneasEntreOrigenes() {

@@ -25,7 +25,9 @@ import java.util.function.Supplier;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.converter.HttpMessageConversionException;
 import org.springframework.stereotype.Service;
+import tools.jackson.core.JacksonException;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
 
@@ -156,6 +158,11 @@ public class SincronizacionDeudasService {
             throw new IntegracionExternaException(
                     origen.proveedor() + " respondió HTTP " + ex.getStatusCode().value() + " al consultar " + nombre, ex);
         } catch (RestClientException ex) {
+            if (ex.contains(JacksonException.class) || ex.contains(HttpMessageConversionException.class)) {
+                log.error("{} devolvió datos inválidos al consultar {}", origen.proveedor(), nombre, ex);
+                throw new IntegracionExternaException(origen.proveedor()
+                        + " devolvió datos inválidos al consultar " + nombre + ".", ex);
+            }
             log.error("No se pudo conectar con {} al consultar {}", origen.proveedor(), nombre, ex);
             throw new IntegracionExternaException("No se pudo conectar con " + origen.proveedor() + " al consultar " + nombre, ex);
         }

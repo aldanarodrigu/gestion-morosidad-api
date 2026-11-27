@@ -24,12 +24,30 @@ class FechaIntendenciaDeserializerTest {
         assertThat(cobro.fechaCobro()).isNull();
     }
 
+    @ParameterizedTest @ValueSource(strings = {"2000-00-30", "2000-01-00", "0000-01-30"})
+    void losVencimientosParcialesQuedanSinFecha(String fecha) {
+        var fila = mapper.readValue("""
+                {"DEUDA_DESDE":"%s","ULTIMO_VENCIMIENTO":"%s","IMPORTE_DEUDA":50}
+                """.formatted(fecha, fecha), GeoPagosFacturaPendienteDto.class);
+        assertThat(fila.deudaDesde()).isNull();
+        assertThat(fila.ultimoVencimiento()).isNull();
+        assertThat(fila.importeDeuda()).isEqualByComparingTo("50");
+    }
+
+    @ParameterizedTest @ValueSource(strings = {"2000-00-30", "2000-01-00"})
+    void lasFechasDeCobroConMesODiaCeroSeSiguenRechazando(String fecha) {
+        assertThatThrownBy(() -> mapper.readValue("""
+                {"FECHA_COBRO":"%s"}
+                """.formatted(fecha), GeoPagosFacturaCanceladaDto.class))
+                .isInstanceOf(JacksonException.class);
+    }
+
     @Test void conservaLaFechaReal() {
         var fila = mapper.readValue("{\"DEUDA_DESDE\":\"2025-08-15\"}", GeoPagosFacturaPendienteDto.class);
         assertThat(fila.deudaDesde()).isEqualTo(LocalDate.of(2025,8,15));
     }
 
-    @ParameterizedTest @ValueSource(strings = {"ayer", "2025-13-01", "2025-02-31"})
+    @ParameterizedTest @ValueSource(strings = {"ayer", "2025-13-01", "2025-02-31", "2025-00-99", "2025-13-00"})
     void otrosValoresInvalidosSiguenAbortandoLaCarga(String fecha) {
         assertThatThrownBy(() -> mapper.readValue("{\"DEUDA_DESDE\":\"" + fecha + "\"}", GeoPagosFacturaPendienteDto.class))
                 .isInstanceOf(JacksonException.class);
