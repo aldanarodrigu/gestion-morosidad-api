@@ -7,6 +7,7 @@ import com.intendencia.gestion_morosidad_api.modules.deuda.entity.EstadoDeuda;
 import com.intendencia.gestion_morosidad_api.modules.contribuyente.entity.Contribuyente;
 import com.intendencia.gestion_morosidad_api.modules.padron.entity.Padron;
 import com.intendencia.gestion_morosidad_api.modules.tributo.entity.Tributo;
+import com.intendencia.gestion_morosidad_api.shared.busqueda.TextoBusqueda;
 import jakarta.persistence.criteria.Join;
 import jakarta.persistence.criteria.Path;
 import jakarta.persistence.criteria.Predicate;
@@ -14,7 +15,6 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import org.springframework.data.jpa.domain.Specification;
 
 /** Filtros dinámicos del listado de deudas. Todo se arma con Criteria API (parámetros, sin concatenar SQL). */
@@ -56,22 +56,22 @@ public final class DeudaSpecifications {
 
                 predicados.add(cb.or(
                         cb.like(
-                                cb.lower(contribuyente.get("nombre")),
+                                TextoBusqueda.normalizar(cb, contribuyente.get("nombre")),
                                 contiene(texto),
                                 ESCAPE
                         ),
                         cb.like(
-                                cb.lower(contribuyente.get("documento")),
+                                TextoBusqueda.normalizar(cb, contribuyente.get("documento")),
                                 contiene(texto),
                                 ESCAPE
                         ),
                         cb.like(
-                                cb.lower(padron.get("matricula")),
+                                TextoBusqueda.normalizar(cb, padron.get("matricula")),
                                 contiene(texto),
                                 ESCAPE
                         ),
                         cb.like(
-                                cb.lower(padron.get("cm")),
+                                TextoBusqueda.normalizar(cb, padron.get("cm")),
                                 contiene(texto),
                                 ESCAPE
                         )
@@ -89,7 +89,7 @@ public final class DeudaSpecifications {
                 predicados.add(cb.equal(root.get("segmentoMora").get("id"), filtro.segmentoId()));
             }
             if (tieneTexto(filtro.localidad())) {
-                predicados.add(cb.like(cb.lower(padron.get("localidad")), contiene(filtro.localidad()), ESCAPE));
+                predicados.add(cb.like(TextoBusqueda.normalizar(cb, padron.get("localidad")), contiene(filtro.localidad()), ESCAPE));
             }
 
             if (filtro.tributo() != null && !filtro.tributo().isBlank()) {
@@ -120,13 +120,7 @@ public final class DeudaSpecifications {
         return valor != null && !valor.isBlank();
     }
 
-    /** Patrón LIKE "contiene", en minúsculas y con comodines escapados. */
     private static String contiene(String texto) {
-        return "%" + escaparLike(texto.trim().toLowerCase(Locale.ROOT)) + "%";
-    }
-
-    /** Evita que % y _ ingresados por el usuario actúen como comodines. */
-    private static String escaparLike(String valor) {
-        return valor.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
+        return TextoBusqueda.contiene(texto);
     }
 }
