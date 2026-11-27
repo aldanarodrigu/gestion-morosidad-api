@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -17,6 +18,7 @@ public interface UsuarioRepository extends JpaRepository<Usuario, Long> {
     boolean existsByUsernameIgnoreCase(String username);
     boolean existsByUsernameIgnoreCaseAndIdNot(String username, Long id);
     Optional<Usuario> findByUsername(String username);
+    List<Usuario> findAllByUsernameIgnoreCase(String username);
 
     @Transactional
     @Modifying(clearAutomatically = true)
