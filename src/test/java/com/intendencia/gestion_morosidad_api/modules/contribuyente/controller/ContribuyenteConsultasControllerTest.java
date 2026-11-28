@@ -9,6 +9,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -78,6 +79,29 @@ class ContribuyenteConsultasControllerTest {
         verify(contribuyenteService).listarContribuyentes(eq("ana"), eq("123"), pageable.capture());
         assertThat(pageable.getValue().getPageNumber()).isEqualTo(2);
         assertThat(pageable.getValue().getPageSize()).isEqualTo(10);
+    }
+
+    @Test
+    void listadoLimitaElTamanoDePaginaA100() throws Exception {
+        when(contribuyenteService.listarContribuyentes(isNull(), isNull(), any(Pageable.class)))
+                .thenAnswer(llamada -> {
+                    Pageable pagina = llamada.getArgument(2);
+                    return new PaginaResponse<>(List.of(), pagina.getPageNumber(), pagina.getPageSize(), 0, 0);
+                });
+
+        mockMvc.perform(get("/api/contribuyentes").param("size", "500").param("page", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.pagina").value(1))
+                .andExpect(jsonPath("$.tamanio").value(100))
+                .andExpect(jsonPath("$.contenido.length()").value(0));
+    }
+
+    @Test
+    void origenInvalidoDevuelve400SinBuscarOtroOrigen() throws Exception {
+        mockMvc.perform(get("/api/contribuyentes/123/padrones").param("origen", "DESCONOCIDO"))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(contribuyenteService);
     }
 
     @Test

@@ -95,11 +95,16 @@ class DeudaServiceTest {
     }
 
     @Test
-    void listarPorPadronIgnoraEspaciosDelParametro() {
-        when(deudaRepository.findByPadronNumeroPadronOrderByDeudaDesdeAsc("4567"))
-                .thenReturn(List.of(deuda(1L, "4567", LocalDate.of(2025, 1, 1))));
+    void listarPorPadronLimpiaElNumeroYExcluyeDeudasFueraDelPeriodo() {
+        Deuda vigente = deuda(1L, "004567", LocalDate.of(2025, 1, 1));
+        Deuda historica = deuda(2L, "004567", LocalDate.of(2012, 1, 1));
+        historica.setEnPeriodoGestion(false);
+        when(deudaRepository.findByPadronNumeroPadronOrderByDeudaDesdeAsc("004567"))
+                .thenReturn(List.of(historica, vigente));
 
-        assertThat(deudaService.listarPorPadron(" 4567 ")).hasSize(1);
+        assertThat(deudaService.listarPorPadron(" 004567 "))
+                .extracting(DeudaResponse::id)
+                .containsExactly(1L);
     }
 
     @Test

@@ -25,6 +25,9 @@ import org.springframework.test.web.servlet.*;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.security.test.context.support.WithMockUser;
 import static org.assertj.core.api.Assertions.*;
+import static org.hamcrest.Matchers.containsInAnyOrder;
+import static org.hamcrest.Matchers.everyItem;
+import static org.hamcrest.Matchers.is;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -90,6 +93,24 @@ class ContribuyentesPadronesContactosPersistenciaTest {
                 .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(1))
                 .andExpect(jsonPath("$[0].contribuyente.documento").value("00999"));
     }
+    @Test
+    void cadaFichaListaSusDeudasPorIdAunqueElNombreYCmCoincidan() throws Exception {
+        mvc.perform(get("/api/contribuyentes/id/{id}/deudas", ana.getId()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[*].padron.numeroPadron", containsInAnyOrder("0007", "0008")))
+                .andExpect(jsonPath("$[*].padron.origen", everyItem(is("INTENDENCIA"))))
+                .andExpect(jsonPath("$[*].contribuyente.documento", everyItem(is("00123"))));
+
+        mvc.perform(get("/api/contribuyentes/id/{id}/deudas", homonima.getId()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].padron.cm").value("100"))
+                .andExpect(jsonPath("$[0].padron.numeroPadron").value("0007"))
+                .andExpect(jsonPath("$[0].padron.origen").value("SUCIVE"))
+                .andExpect(jsonPath("$[0].contribuyente.documento").value("00999"));
+    }
+
     @Test void numeroDePadronRepetidoDevuelveTodosYLocalidadSeleccionaElCorrecto() throws Exception {
         mvc.perform(get("/api/padrones/0007")).andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(2));
         mvc.perform(get("/api/padrones/0007/contribuyente").param("localidad","  libertad "))
