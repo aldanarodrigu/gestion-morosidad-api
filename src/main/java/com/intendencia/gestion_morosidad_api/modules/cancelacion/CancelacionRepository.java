@@ -1,5 +1,6 @@
 package com.intendencia.gestion_morosidad_api.modules.cancelacion;
 
+import com.intendencia.gestion_morosidad_api.shared.busqueda.TextoBusqueda;
 import com.intendencia.gestion_morosidad_api.shared.dto.PaginaResponse;
 import com.intendencia.gestion_morosidad_api.shared.enums.OrigenDatos;
 import java.math.BigDecimal;
@@ -142,9 +143,13 @@ public class CancelacionRepository {
         if (filtro.buscar() != null && !filtro.buscar().isBlank()) {
             sql.append("""
                      AND (cm = :texto OR numero_padron = :texto OR documento = :texto
-                          OR numero_cobro = :texto OR strpos(lower(persona), lower(:texto)) > 0)
+                          OR numero_cobro = :texto
+                          OR strpos(translate(lower(persona), :conTilde, :sinTilde), :textoNormalizado) > 0)
                     """);
             parametros.addValue("texto", filtro.buscar().strip());
+            parametros.addValue("textoNormalizado", TextoBusqueda.normalizar(filtro.buscar()));
+            parametros.addValue("conTilde", TextoBusqueda.CON_TILDE);
+            parametros.addValue("sinTilde", TextoBusqueda.SIN_TILDE);
         }
         return new Consulta(sql.toString(), parametros);
     }

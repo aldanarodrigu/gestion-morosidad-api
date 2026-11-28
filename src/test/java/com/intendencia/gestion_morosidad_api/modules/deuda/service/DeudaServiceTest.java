@@ -27,6 +27,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 
 @ExtendWith(MockitoExtension.class)
 class DeudaServiceTest {
@@ -52,6 +55,24 @@ class DeudaServiceTest {
         // "Hoy" fijo: 2026-09-23
         Clock clock = Clock.fixed(Instant.parse("2026-09-23T15:00:00Z"), ZONA);
         deudaService = new DeudaService(deudaRepository, configuracionSegmentoService, clock, accionSegmentoRepository, gestionRepository);
+    }
+
+    @Test
+    void conDesempateAgregaElIdAlFinalDelOrden() {
+        Pageable pedido = PageRequest.of(2, 20, Sort.by("deudaDesde"));
+
+        Pageable resultado = DeudaService.conDesempate(pedido);
+
+        assertThat(resultado.getPageNumber()).isEqualTo(2);
+        assertThat(resultado.getPageSize()).isEqualTo(20);
+        assertThat(resultado.getSort()).isEqualTo(Sort.by("deudaDesde").and(Sort.by("id")));
+    }
+
+    @Test
+    void conDesempateRespetaUnOrdenQueYaIncluyeElId() {
+        Pageable pedido = PageRequest.of(0, 20, Sort.by(Sort.Direction.DESC, "id"));
+
+        assertThat(DeudaService.conDesempate(pedido)).isSameAs(pedido);
     }
 
     @Test

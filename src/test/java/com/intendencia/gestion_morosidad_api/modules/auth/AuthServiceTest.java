@@ -21,4 +21,12 @@ class AuthServiceTest {
  @Test void credencialesInvalidasNoEmitenToken(){when(manager.authenticate(any())).thenThrow(new BadCredentialsException("inválidas"));assertThatThrownBy(()->service.login(new LoginRequest("x","y"),"10.0.0.1")).isInstanceOf(BadCredentialsException.class);verifyNoInteractions(tokens);}
  @Test void cuentaInactivaRechazadaPorAutenticacionNoEmiteToken(){when(manager.authenticate(any())).thenThrow(new DisabledException("inactiva"));assertThatThrownBy(()->service.login(new LoginRequest("x","y"),"10.0.0.1")).isInstanceOf(DisabledException.class);verifyNoInteractions(tokens);}
  @Test void usuarioAusenteDespuesDeAutenticarNoGeneraToken(){assertThatThrownBy(()->service.login(new LoginRequest("x","y"),"10.0.0.1")).isInstanceOf(BadCredentialsException.class);verifyNoInteractions(tokens);}
+ @Test void ignoraEspaciosYMayusculasDelNombreYAutenticaConElGuardado(){var u=new Usuario();u.setId(5L);u.setUsername("admin");u.setRoles(Set.of(Rol.ADMINISTRADOR));
+  when(usuarios.findAllByUsernameIgnoreCase("Admin")).thenReturn(java.util.List.of(u));when(tokens.generateToken(u)).thenReturn("t");
+  assertThat(service.login(new LoginRequest(" Admin ","clave-prueba"),"10.0.0.1").token()).isEqualTo("t");
+  verify(usuarios).findByUsername("Admin");verify(manager).authenticate(argThat(a->a.getName().equals("admin")));}
+ @Test void nombreRepetidoSinMayusculasNoEligeNingunaCuenta(){var a=new Usuario();a.setUsername("ana");var b=new Usuario();b.setUsername("Ana");
+  when(usuarios.findAllByUsernameIgnoreCase("ANA")).thenReturn(java.util.List.of(a,b));
+  assertThatThrownBy(()->service.login(new LoginRequest("ANA","y"),"10.0.0.1")).isInstanceOf(BadCredentialsException.class);
+  verify(manager).authenticate(argThat(x->x.getName().equals("ANA")));verifyNoInteractions(tokens);}
 }

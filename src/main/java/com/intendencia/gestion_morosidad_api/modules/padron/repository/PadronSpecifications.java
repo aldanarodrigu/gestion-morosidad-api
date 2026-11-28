@@ -8,9 +8,9 @@ import jakarta.persistence.criteria.Path;
 import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.Root;
 import jakarta.persistence.criteria.Subquery;
+import com.intendencia.gestion_morosidad_api.shared.busqueda.TextoBusqueda;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import org.springframework.data.jpa.domain.Specification;
 
 /** Filtros del listado de contribuyentes (un registro por padrón). Criteria API: sin concatenar SQL. */
@@ -41,10 +41,10 @@ public final class PadronSpecifications {
 
             Path<Contribuyente> contribuyente = root.get("contribuyente");
             if (tieneTexto(nombre)) {
-                predicados.add(cb.like(cb.lower(contribuyente.get("nombre")), contiene(nombre), ESCAPE));
+                predicados.add(cb.like(TextoBusqueda.normalizar(cb, contribuyente.get("nombre")), contiene(nombre), ESCAPE));
             }
             if (tieneTexto(documento)) {
-                predicados.add(cb.like(cb.lower(contribuyente.get("documento")), contiene(documento), ESCAPE));
+                predicados.add(cb.like(TextoBusqueda.normalizar(cb, contribuyente.get("documento")), contiene(documento), ESCAPE));
             }
             return cb.and(predicados.toArray(Predicate[]::new));
         };
@@ -54,10 +54,7 @@ public final class PadronSpecifications {
         return valor != null && !valor.isBlank();
     }
 
-    /** Patrón LIKE "contiene", en minúsculas y con % y _ escapados. */
     private static String contiene(String texto) {
-        String escapado = texto.trim().toLowerCase(Locale.ROOT)
-                .replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
-        return "%" + escapado + "%";
+        return TextoBusqueda.contiene(texto);
     }
 }
