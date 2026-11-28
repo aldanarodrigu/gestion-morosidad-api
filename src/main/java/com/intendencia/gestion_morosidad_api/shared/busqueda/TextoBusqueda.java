@@ -6,14 +6,14 @@ import java.text.Normalizer;
 import java.util.Locale;
 import java.util.regex.Pattern;
 
-// los nombres vienen de GeoPagos sin tildes (Nunez, Lucia), asi que se busca sin tildes
+/** Normalización de texto para las búsquedas de cartera. */
 public final class TextoBusqueda {
 
-    // para translate(), tienen que tener el mismo largo
-    public static final String CON_TILDE = "áàäâãéèëêíìïîóòöôõúùüûñç";
-    public static final String SIN_TILDE = "aaaaaeeeeiiiiooooouuuunc";
+    // Bloque de marcas combinadas que usa la descomposición de los acentos latinos.
+    // La misma expresión se aplica en Java y en PostgreSQL.
+    public static final String MARCAS_DIACRITICAS = "[\u0300-\u036F]+";
 
-    private static final Pattern MARCAS = Pattern.compile("\\p{M}+");
+    private static final Pattern MARCAS = Pattern.compile(MARCAS_DIACRITICAS);
 
     private TextoBusqueda() {
     }
@@ -24,8 +24,10 @@ public final class TextoBusqueda {
     }
 
     public static Expression<String> normalizar(CriteriaBuilder cb, Expression<String> columna) {
-        return cb.function("translate", String.class, cb.lower(columna),
-                cb.literal(CON_TILDE), cb.literal(SIN_TILDE));
+        Expression<String> descompuesta = cb.function("pg_catalog.normalize", String.class,
+                cb.lower(columna), cb.literal(Normalizer.Form.NFD.name()));
+        return cb.function("regexp_replace", String.class, descompuesta,
+                cb.literal(MARCAS_DIACRITICAS), cb.literal(""), cb.literal("g"));
     }
 
     public static String contiene(String texto) {

@@ -144,12 +144,12 @@ public class CancelacionRepository {
             sql.append("""
                      AND (cm = :texto OR numero_padron = :texto OR documento = :texto
                           OR numero_cobro = :texto
-                          OR strpos(translate(lower(persona), :conTilde, :sinTilde), :textoNormalizado) > 0)
+                          OR strpos(regexp_replace(pg_catalog.normalize(lower(persona), 'NFD'),
+                                  :marcasDiacriticas, '', 'g'), :textoNormalizado) > 0)
                     """);
             parametros.addValue("texto", filtro.buscar().strip());
             parametros.addValue("textoNormalizado", TextoBusqueda.normalizar(filtro.buscar()));
-            parametros.addValue("conTilde", TextoBusqueda.CON_TILDE);
-            parametros.addValue("sinTilde", TextoBusqueda.SIN_TILDE);
+            parametros.addValue("marcasDiacriticas", TextoBusqueda.MARCAS_DIACRITICAS);
         }
         return new Consulta(sql.toString(), parametros);
     }

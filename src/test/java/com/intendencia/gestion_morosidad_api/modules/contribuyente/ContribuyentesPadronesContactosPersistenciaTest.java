@@ -118,6 +118,41 @@ class ContribuyentesPadronesContactosPersistenciaTest {
                 .andExpect(jsonPath("$[0].documento").value("00123"));
         mvc.perform(get("/api/padrones/0007").param("localidad","NO EXISTE")).andExpect(status().isNotFound());
     }
+    @ParameterizedTest
+    @ValueSource(strings = {" SAN JOSE ", "San Jose\u0301"})
+    void consultaPadronesYTitularPorLocalidadConTildesOpcionales(String localidad) throws Exception {
+        mvc.perform(get("/api/padrones/0007").param("localidad", localidad))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].localidad").value("San José"))
+                .andExpect(jsonPath("$[0].origen").value("SUCIVE"));
+
+        mvc.perform(get("/api/padrones/0007/contribuyente").param("localidad", localidad))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].documento").value("00999"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"lucia nunez", " LUCÍA NÚÑEZ ", "Luci\u0301a Nu\u0301n\u0303ez"})
+    void encuentraIgualLosNombresConAcentosCompuestosYCombinados(String busqueda) throws Exception {
+        ana.setNombre("Lucía Núñez");
+        homonima.setNombre("Luci\u0301a Nu\u0301n\u0303ez");
+        em.flush();
+        em.clear();
+
+        mvc.perform(get("/api/deudas").param("contribuyente", busqueda))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElementos").value(3));
+        mvc.perform(get("/api/deudas/agrupadas").param("contribuyente", busqueda))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElementos").value(2))
+                .andExpect(jsonPath("$.contenido[*].documento", containsInAnyOrder("00123", "00999")));
+        mvc.perform(get("/api/contribuyentes").param("nombre", busqueda))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElementos").value(3));
+    }
+
     @Test void listadoFiltraAntesDePaginarYConservaUnaFilaPorPadron() throws Exception {
         for(int pagina=0;pagina<2;pagina++)
             mvc.perform(get("/api/contribuyentes").param("nombre"," ANA ").param("documento","00123")

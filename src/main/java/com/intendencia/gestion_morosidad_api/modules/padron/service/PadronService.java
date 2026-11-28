@@ -4,6 +4,7 @@ import com.intendencia.gestion_morosidad_api.modules.contribuyente.dto.Contribuy
 import com.intendencia.gestion_morosidad_api.modules.padron.dto.PadronResponse;
 import com.intendencia.gestion_morosidad_api.modules.padron.entity.Padron;
 import com.intendencia.gestion_morosidad_api.modules.padron.repository.PadronRepository;
+import com.intendencia.gestion_morosidad_api.shared.busqueda.TextoBusqueda;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,7 +19,7 @@ public class PadronService {
 
     /**
      * El número de padrón se repite entre localidades, así que devuelve todos los padrones con ese
-     * número. Con {@code localidad} se queda solo con los de esa localidad (sin distinguir mayúsculas).
+     * número. Con {@code localidad} se compara el nombre completo, sin distinguir mayúsculas ni tildes.
      */
     @Transactional
     public List<PadronResponse> buscarPorNumeroPadron(String numeroPadron, String localidad) {
@@ -40,9 +41,10 @@ public class PadronService {
         if (localidad == null || localidad.isBlank()) {
             return padrones;
         }
-        String buscada = localidad.trim();
+        String buscada = TextoBusqueda.normalizar(localidad);
         return padrones.stream()
-                .filter(padron -> padron.getLocalidad() != null && padron.getLocalidad().trim().equalsIgnoreCase(buscada))
+                .filter(padron -> padron.getLocalidad() != null
+                        && TextoBusqueda.normalizar(padron.getLocalidad()).equals(buscada))
                 .toList();
     }
 

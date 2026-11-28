@@ -763,6 +763,23 @@ class SincronizacionCasosRealesPersistenciaTest {
     }
 
     @Test
+    void cancelacionesEncuentraPersonasConAcentosCombinadosFueraDeLaListaAnterior() throws Exception {
+        cancelaciones.guardar(List.of(
+                new Cancelacion(null, OrigenDatos.SUCIVE, "001", "0001", "03",
+                        "Zoe\u0308 Ma\u0304rtin", "0002", DIA_1, BigDecimal.TEN, "PAGO", DIA_1.atStartOfDay()),
+                new Cancelacion(null, OrigenDatos.SUCIVE, "002", "0002", "04",
+                        "Zoë Méndez", "0003", DIA_1, BigDecimal.TEN, "PAGO", DIA_1.atStartOfDay())));
+
+        for (String busqueda : List.of("ZOE MARTIN", "Zoë Mārtin")) {
+            mvc.perform(get("/api/cancelaciones").with(user("analista").roles("ANALISTA"))
+                            .param("buscar", busqueda))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.totalElementos").value(1))
+                    .andExpect(jsonPath("$.contenido[0].numeroCobro").value("0001"));
+        }
+    }
+
+    @Test
     void exportaAmbosFormatosConLosFiltrosDeLaListaYElRolAnalista() throws Exception {
         var filas = new ArrayList<Cancelacion>();
         for (int i = 1; i <= 23; i++) {
